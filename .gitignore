@@ -1,0 +1,10 @@
+.DS_store
+src/.DS_Store
+.idea
+bin
+dist
+out
+*.iml
+*.dat
+*.schema
+*.db
