@@ -1,7 +1,9 @@
 package simpledb;
 
+import javax.xml.crypto.Data;
 import java.io.*;
 
+import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -20,6 +22,9 @@ public class BufferPool {
     private static final int DEFAULT_PAGE_SIZE = 4096;
 
     private static int pageSize = DEFAULT_PAGE_SIZE;
+    private int numPages;
+
+    private HashMap<PageId, Page> idToPg;
     
     /** Default number of pages passed to the constructor. This is used by
     other classes. BufferPool should use the numPages argument to the
@@ -32,7 +37,8 @@ public class BufferPool {
      * @param numPages maximum number of pages in this buffer pool.
      */
     public BufferPool(int numPages) {
-        // some code goes here
+        this.numPages = numPages;
+        this.idToPg = new HashMap<>();
     }
     
     public static int getPageSize() {
@@ -66,8 +72,18 @@ public class BufferPool {
      */
     public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
-        // some code goes here
-        return null;
+        if (idToPg.get(pid) == null) {
+
+            // If not enough space throw DBException
+            if (idToPg.size() == numPages) {
+                throw new DbException("Not enough space!!");
+            }
+
+            // buffer pool has space, so we can add our new pages to the buffer pool!
+            // we can access the DbFile by using the DbFile.readPage method!
+            idToPg.put(pid, Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid));
+        }
+        return idToPg.get(pid);
     }
 
     /**
