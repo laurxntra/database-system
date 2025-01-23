@@ -1,7 +1,6 @@
 In your own words, describe what Lab1 was about: Describe the various components that you implemented and how they work.
  This part needs to demonstrate your understanding of the lab! If your description looks like a copy paste of the
  instructions or a copy-paste of the provided documentation you will lose points.
-
 - In Lab 1, we developed components of SimpleDB to handle a basic query SELECT * FROM some_data_file.
 - For BufferPool.java, our buffer pool can only store up to numPages. When exceeding this, we would throw an exception
 instead of using an LRU policy. Compared to our homework, we had to consider a LRU eviction policy rather than throwing
