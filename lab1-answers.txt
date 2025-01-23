@@ -29,10 +29,11 @@ Give one example of a unit test that could be added to improve the set of unit t
 You do not need to write the code of the unit test, only describe it in the write-up. If you wrote one or more
 especially useful new unit-tests, you can submit a pull request and we will consider integrating your tests into the
 lab for next year. Pull requests won't get extra credit, only eternal glory if the tests get integrated.
-- A unit test that could be added to improve the set of unit tests provided for this lab is to test the handling of
-invalid indices in the TupleDesc class. More specifically, in the getFieldName and getFieldType methods throw a
-NoSuchElementException when an invalid index i is passed.  The unit test would involve providing an invalid index to
-these methods and asserting that the NoSuchElementException is correctly thrown
+- One additional unit test that could be added to improve test suite is a test that checks TupleDesc’s getFieldName()
+method’s throws an error on invalid inputs. Currently, we’re not explicitly checking that we throw a
+NoSuchElementException() on invalid inputs (where parameter i is not a valid field reference). The unit test would call
+getFieldType() with invalid inputs like negative numbers or a number larger than the number of fields that exist on the
+TupleDesc and assertThrows a NoSuchElementException
 
 Discuss and justify any changes you made to the API. You really should not change the API. If you plan to make a change,
 ask the TAs first.
