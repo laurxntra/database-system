@@ -1,0 +1,49 @@
+In your own words, describe what Lab1 was about: Describe the various components that you implemented and how they work.
+ This part needs to demonstrate your understanding of the lab! If your description looks like a copy paste of the
+ instructions or a copy-paste of the provided documentation you will lose points.
+
+- In Lab 1, we developed components of SimpleDB to handle a basic query SELECT * FROM some_data_file.
+- For BufferPool.java, our buffer pool can only store up to numPages. When exceeding this, we would throw an exception
+instead of using an LRU policy. Compared to our homework, we had to consider a LRU eviction policy rather than throwing
+an exception.
+- seqScan() involved reading through each tuple in a table with methods like next() and open(). Utilizing iterators was
+essential in this process, helping us traverse through DBFiles. The database file is retrieved from the catalog, with
+iterators helping it browse through the table’s contents for seqScan(). The iterator shows how pages are fetched on at
+a time from the buffer pool, stored in memory, enabling the heap file’s cursor to access tuples.
+- To determine whether a slot is used/unused, we used the header bitmap to determine the slot usage. In getPageDate(),
+unused slots have their byte arrays filled with zeros.
+- A table is stored in a HeapFile, which will contain multiple HeapPages. Each HeapPage is grabbed from disk and stored
+in the BufferPool as a HashMap mapping PageId to Page. If we had a page that is not in the bufferpool, we would add them
+in from the disk using the getPage() method in BufferPool. Each HeapPage has a specific amount of tuples in them which
+can be accessed with an iterator, it also consists of a header with unused/used bitmaps and tuples, and each table can
+span over multiple heapPages, so when iterating through tuples, we can iterate over the page, and if there is no more
+after, we will move onto the next page with the tuples left over.
+
+Describe any design decisions you made. These may be minimal for Lab 1.
+- We utilized a HashMap that mapped PageId to Page to store pages in bufferpool because fetching a page through its
+PageId is a frequent action and HashMap provides O(1) fetch time.
+- We implemented an iterator using an iterator over pages (tupleIterator). We also used a counter (pageNumber) to keep
+track of the current pages.
+- For catalog we opted HashMaps to map relationships with id, tableName, DBFile, tupleDesc, and primary key.
+
+Give one example of a unit test that could be added to improve the set of unit tests that we provided for this lab.
+You do not need to write the code of the unit test, only describe it in the write-up. If you wrote one or more
+especially useful new unit-tests, you can submit a pull request and we will consider integrating your tests into the
+lab for next year. Pull requests won't get extra credit, only eternal glory if the tests get integrated.
+- A unit test that could be added to improve the set of unit tests provided for this lab is to test the handling of
+invalid indices in the TupleDesc class. More specifically, in the getFieldName and getFieldType methods throw a
+NoSuchElementException when an invalid index i is passed.  The unit test would involve providing an invalid index to
+these methods and asserting that the NoSuchElementException is correctly thrown
+
+Discuss and justify any changes you made to the API. You really should not change the API. If you plan to make a change,
+ask the TAs first.
+- We did not make any changes to the API.
+
+Describe any missing or incomplete elements of your code.
+- No
+
+If you have any feedback for us on the assignment, you can add it to the writeup, send us an email, or make a note and
+paste your note in the course evaluation form at the end of the quarter.
+- No feedback
+
+
