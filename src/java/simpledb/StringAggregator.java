@@ -1,11 +1,18 @@
 package simpledb;
 
+import java.util.*;
+
 /**
  * Knows how to compute some aggregate over a set of StringFields.
  */
 public class StringAggregator implements Aggregator {
 
     private static final long serialVersionUID = 1L;
+    private final int gbField;
+    private final Type gbFieldType;
+    private final int aField;
+    private final Op aggregatorOp;
+    private final HashMap<Field, Integer> aggMap;
 
     /**
      * Aggregate constructor
@@ -17,7 +24,15 @@ public class StringAggregator implements Aggregator {
      */
 
     public StringAggregator(int gbfield, Type gbfieldtype, int afield, Op what) {
-        // some code goes here
+        if (what != Op.COUNT) {
+            throw new IllegalArgumentException();
+        }
+
+        this.gbField = gbfield;
+        this.gbFieldType = gbfieldtype;
+        this.aField = afield;
+        this.aggregatorOp = what;
+        this.aggMap = new HashMap<>();
     }
 
     /**
@@ -25,7 +40,15 @@ public class StringAggregator implements Aggregator {
      * @param tup the Tuple containing an aggregate field and a group-by field
      */
     public void mergeTupleIntoGroup(Tuple tup) {
-        // some code goes here
+        Field gbField = this.gbField == Aggregator.NO_GROUPING ? null : tup.getField(this.gbField);
+        boolean containsKey = aggMap.containsKey(gbField);
+
+        // we only support count so if key doesnt exist, we start with count = 1
+        if (!containsKey) {
+            aggMap.put(gbField, 1);
+        } else {
+            aggMap.put(gbField, aggMap.get(gbField) + 1); // if key already exists, we increment count
+        }
     }
 
     /**
@@ -37,8 +60,68 @@ public class StringAggregator implements Aggregator {
      *   aggregate specified in the constructor.
      */
     public OpIterator iterator() {
-        // some code goes here
-        throw new UnsupportedOperationException("please implement me for lab2");
+        return new OpIterator() {
+            int currentIndex = 0;
+            TupleDesc tupleDesc;
+            List<Tuple> tuples;
+
+            @Override
+            public void open() throws DbException, TransactionAbortedException {
+                tuples = new ArrayList<>();
+
+                if (gbField == Aggregator.NO_GROUPING) {
+                    this.tupleDesc = new TupleDesc(new Type[] { Type.INT_TYPE });
+
+                    // we only need access to the values of the map since the key of the map stores groupValue
+                    for (Integer i : aggMap.values()) {
+                        Tuple tuple = new Tuple(this.tupleDesc);
+                        tuple.setField(0, new IntField(i));
+                        tuples.add(tuple);
+                    }
+                } else {
+                    this.tupleDesc = new TupleDesc(new Type[] { gbFieldType, Type.INT_TYPE });
+
+                    // entrySet so we can get key aka groupValue for the first field, and the aggValue for second field
+                    for (Map.Entry<Field, Integer> entry : aggMap.entrySet()) {
+                        Tuple tuple = new Tuple(this.tupleDesc);
+                        tuple.setField(0, entry.getKey());
+                        tuple.setField(1, new IntField(entry.getValue()));
+                        tuples.add(tuple);
+                    }
+                }
+            }
+
+            @Override
+            public boolean hasNext() throws DbException, TransactionAbortedException {
+                return currentIndex < tuples.size();
+            }
+
+            @Override
+            public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException {
+                if (tuples == null || !hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                return tuples.get(currentIndex++);
+            }
+
+            @Override
+            public void rewind() throws DbException, TransactionAbortedException {
+                close();
+                open();
+            }
+
+            @Override
+            public TupleDesc getTupleDesc() {
+                return this.tupleDesc;
+            }
+
+            @Override
+            public void close() {
+                currentIndex = 0;
+                tupleDesc = null;
+                tuples = null;
+            }
+        };
     }
 
 }

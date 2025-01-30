@@ -102,6 +102,14 @@ public class AggregateTest extends SimpleDbTestBase {
     assertEquals(expected, actual);
   }
 
+  @Test public void getTupleDescNoGrouping() {
+    Aggregate op = new Aggregate(scan1, 0, -1,
+            Aggregator.Op.MIN);
+    TupleDesc expected = new TupleDesc(new Type[]{ Type.INT_TYPE });
+    TupleDesc actual = op.getTupleDesc();
+    assertEquals(expected, actual);
+  }
+
   /**
    * Unit test for Aggregate.rewind()
    */
