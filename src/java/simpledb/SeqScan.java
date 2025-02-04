@@ -106,7 +106,10 @@ public class SeqScan implements OpIterator {
 
     public Tuple next() throws NoSuchElementException,
             TransactionAbortedException, DbException {
-        if (dbFileIterator == null) return null;
+        if (dbFileIterator == null) {
+            // testing
+            throw new NoSuchElementException("Iterator is not open");
+        }
         return dbFileIterator.next();
     }
 

@@ -3,6 +3,7 @@ package simpledb;
 import javax.xml.crypto.Data;
 import java.io.*;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -14,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * The BufferPool is also responsible for locking;  when a transaction fetches
  * a page, BufferPool checks that the transaction has the appropriate
  * locks to read/write the page.
- * 
+ *
  * @Threadsafe, all fields are final
  */
 public class BufferPool {
@@ -25,7 +26,7 @@ public class BufferPool {
     private int numPages;
 
     private HashMap<PageId, Page> idToPg;
-    
+
     /** Default number of pages passed to the constructor. This is used by
     other classes. BufferPool should use the numPages argument to the
     constructor instead. */
@@ -40,16 +41,16 @@ public class BufferPool {
         this.numPages = numPages;
         this.idToPg = new HashMap<>();
     }
-    
+
     public static int getPageSize() {
       return pageSize;
     }
-    
+
     // THIS FUNCTION SHOULD ONLY BE USED FOR TESTING!!
     public static void setPageSize(int pageSize) {
     	BufferPool.pageSize = pageSize;
     }
-    
+
     // THIS FUNCTION SHOULD ONLY BE USED FOR TESTING!!
     public static void resetPageSize() {
     	BufferPool.pageSize = DEFAULT_PAGE_SIZE;
@@ -132,14 +133,14 @@ public class BufferPool {
 
     /**
      * Add a tuple to the specified table on behalf of transaction tid.  Will
-     * acquire a write lock on the page the tuple is added to and any other 
-     * pages that are updated (Lock acquisition is not needed for lab2). 
+     * acquire a write lock on the page the tuple is added to and any other
+     * pages that are updated (Lock acquisition is not needed for lab2).
      * May block if the lock(s) cannot be acquired.
-     * 
+     *
      * Marks any pages that were dirtied by the operation as dirty by calling
-     * their markDirty bit, and adds versions of any pages that have 
-     * been dirtied to the cache (replacing any existing versions of those pages) so 
-     * that future requests see up-to-date pages. 
+     * their markDirty bit, and adds versions of any pages that have
+     * been dirtied to the cache (replacing any existing versions of those pages) so
+     * that future requests see up-to-date pages.
      *
      * @param tid the transaction adding the tuple
      * @param tableId the table to add the tuple to
@@ -147,8 +148,18 @@ public class BufferPool {
      */
     public void insertTuple(TransactionId tid, int tableId, Tuple t)
         throws DbException, IOException, TransactionAbortedException {
-        // some code goes here
-        // not necessary for lab1
+        // Helps us perform insertion of our tuple into the table with tableId
+        DbFile file = Database.getCatalog().getDatabaseFile(tableId);
+        // Keeps track of dirty pages that were modified in our HeapPage
+        ArrayList<Page> dirtyPgs = file.insertTuple(tid, t);
+
+        // Looping through our dirty pages
+        for (Page pg : dirtyPgs) {
+            // We need to mark the dirty pages that has been modified back to our disk with its tid
+            pg.markDirty(true, tid);
+            // Now we need to add our dirty pages back to our hashmap so that our cache
+            idToPg.put(pg.getId(), pg);
+        }
     }
 
     /**
@@ -157,17 +168,33 @@ public class BufferPool {
      * other pages that are updated. May block if the lock(s) cannot be acquired.
      *
      * Marks any pages that were dirtied by the operation as dirty by calling
-     * their markDirty bit, and adds versions of any pages that have 
-     * been dirtied to the cache (replacing any existing versions of those pages) so 
-     * that future requests see up-to-date pages. 
+     * their markDirty bit, and adds versions of any pages that have
+     * been dirtied to the cache (replacing any existing versions of those pages) so
+     * that future requests see up-to-date pages.
      *
      * @param tid the transaction deleting the tuple.
      * @param t the tuple to delete
      */
     public  void deleteTuple(TransactionId tid, Tuple t)
         throws DbException, IOException, TransactionAbortedException {
-        // some code goes here
-        // not necessary for lab1
+        int tableId = t.getRecordId().getPageId().getTableId();
+        DbFile file = Database.getCatalog().getDatabaseFile(tableId);
+        ArrayList<Page> dirtyPgs = file.deleteTuple(tid, t);
+
+        // Looping through dirty pages
+        for (Page pg: dirtyPgs) {
+            // We need to check first if our buffer pool is full and if the page
+            // we're currently looking at is not already in our pool. If so,
+            // we need to evict the page from the buffer pool to make space for
+            // the new page. This is purely for optimization!!
+            if (idToPg.size() == numPages && !idToPg.containsKey(pg.getId())) {
+                evictPage();
+            }
+
+            // similar scenario as our insertTuple() previously
+            pg.markDirty(true, tid);
+            idToPg.put(pg.getId(), pg);
+        }
     }
 
     /**
@@ -185,7 +212,7 @@ public class BufferPool {
         Needed by the recovery manager to ensure that the
         buffer pool doesn't keep a rolled back page in its
         cache.
-        
+
         Also used by B+ tree files to ensure that deleted pages
         are removed from the cache so they can be reused safely
     */

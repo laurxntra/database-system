@@ -4,7 +4,7 @@ import java.util.*;
 import java.io.*;
 
 /**
- * Each instance of HeapPage stores data for one page of HeapFiles and 
+ * Each instance of HeapPage stores data for one page of HeapFiles and
  * implements the Page interface that is used by BufferPool.
  *
  * @see HeapFile
@@ -21,6 +21,9 @@ public class HeapPage implements Page {
 
     byte[] oldData;
     private final Byte oldDataLock=new Byte((byte)0);
+
+    private boolean isDirty;
+    private TransactionId tid;
 
     /**
      * Create a HeapPage from a set of bytes of data read from disk.
@@ -48,7 +51,7 @@ public class HeapPage implements Page {
         header = new byte[getHeaderSize()];
         for (int i=0; i<header.length; i++)
             header[i] = dis.readByte();
-        
+
         tuples = new Tuple[numSlots];
         try{
             // allocate and read the actual records of this page
@@ -75,9 +78,9 @@ public class HeapPage implements Page {
      */
     private int getHeaderSize() {
         return (int) Math.ceil((double) numSlots / 8);
-                 
+
     }
-    
+
     /** Return a view of this page before it was modified
         -- used by recovery */
     public HeapPage getBeforeImage(){
@@ -95,7 +98,7 @@ public class HeapPage implements Page {
         }
         return null;
     }
-    
+
     public void setBeforeImage() {
         synchronized(oldDataLock)
         {
@@ -191,7 +194,7 @@ public class HeapPage implements Page {
                 Field f = tuples[i].getField(j);
                 try {
                     f.serialize(dos);
-                
+
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -238,8 +241,25 @@ public class HeapPage implements Page {
      * @param t The tuple to delete
      */
     public void deleteTuple(Tuple t) throws DbException {
-        // some code goes here
-        // not necessary for lab1
+       // According to spec,
+        // "Tuples contain RecordIDs which allow you to find the page they reside on"
+        // so we need to grab the rid of the tuple we're looking at & its index
+        RecordId rid = t.getRecordId();
+        int indexOfslot = rid.getTupleNumber();
+
+        // Checking to see if tuple is not on this page
+        if (!rid.getPageId().equals(pid)) {
+            throw new DbException("Tuple is not on this page");
+        }
+
+        // Checking to see if tuple slot is already empty
+        if (!isSlotUsed(indexOfslot)) {
+            throw new DbException("Tuple slot is already empty");
+        }
+
+        // Now we delete the specific tuple from the page!
+        tuples[indexOfslot] = null;
+        markSlotUsed(indexOfslot, false);
     }
 
     /**
@@ -250,8 +270,31 @@ public class HeapPage implements Page {
      * @param t The tuple to add.
      */
     public void insertTuple(Tuple t) throws DbException {
-        // some code goes here
-        // not necessary for lab1
+        // According to the spec: getNumEmptySlots() and isSlotUsed() methods
+        // we asked you to implement in Lab 1 serve as useful abstractions.
+        // we're going to use these methods to help us check to see if the page
+        // or if the slot we're currently looking at is used/unnused
+
+        // Checks to see if the page is full or the tupledesc is mismatched
+        if (!td.equals(t.getTupleDesc()) || getNumEmptySlots() == 0) {
+            throw new DbException("Page is full or the tupledesc is mismatched");
+        }
+
+        for (int i = 0; i < numSlots; i++) {
+            if(!isSlotUsed(i)) {
+                // need to mark the slot as used
+                markSlotUsed(i, true);
+
+                // Need to update our record id
+                t.setRecordId(new RecordId(pid, i));
+
+                // insert tuple into our empty slot!!
+                tuples[i] = t;
+
+                // continuing!
+                return;
+            }
+        }
     }
 
     /**
@@ -259,17 +302,22 @@ public class HeapPage implements Page {
      * that did the dirtying
      */
     public void markDirty(boolean dirty, TransactionId tid) {
-        // some code goes here
-	// not necessary for lab1
+        this.isDirty = dirty;
+        this.tid = tid;
     }
 
     /**
      * Returns the tid of the transaction that last dirtied this page, or null if the page is not dirty
      */
     public TransactionId isDirty() {
-        // some code goes here
-	// Not necessary for lab1
-        return null;      
+        // returns tid of the tid of last dirtied this page
+        if (this.isDirty) {
+            return this.tid;
+        } else {
+            // returns null if page is not dirty
+            return null;
+        }
+
     }
 
     /**
@@ -301,8 +349,18 @@ public class HeapPage implements Page {
      * Abstraction to fill or clear a slot on this page.
      */
     private void markSlotUsed(int i, boolean value) {
-        // some code goes here
-        // not necessary for lab1
+        int byteInd = i / 8;
+        int bitInd = i % 8;
+
+        // if our value is true, we will mark the slot as used!
+        if (value) {
+            // Use byte index OR set the bit index to 1
+            header[byteInd] |= 1 << bitInd;
+        // if our value is false, we need to mark the slot as unnused!
+        } else {
+            // Use byte index AND clear the bit index
+            header[byteInd] &= ~(1 << bitInd);
+        }
     }
 
     /**
