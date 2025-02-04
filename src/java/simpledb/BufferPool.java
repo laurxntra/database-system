@@ -75,9 +75,9 @@ public class BufferPool {
         throws TransactionAbortedException, DbException {
         if (idToPg.get(pid) == null) {
 
-            // If not enough space throw DBException
-            if (idToPg.size() == numPages) {
-                throw new DbException("Not enough space!!");
+            // If not enough space evict page!
+            if (idToPg.size() >= numPages) {
+                evictPage();
             }
 
             // buffer pool has space, so we can add our new pages to the buffer pool!
@@ -226,8 +226,26 @@ public class BufferPool {
      * @param pid an ID indicating the page to flush
      */
     private synchronized  void flushPage(PageId pid) throws IOException {
-        // some code goes here
-        // not necessary for lab1
+        Page pg = idToPg.get(pid);
+
+        // Have to check if the page is dirty
+        // If the page is not dirty, we don't need to flush it to the disk
+        // so we can just return!
+        if (pg.isDirty() == null) {
+            return;
+        }
+
+        // We have to check if the page is null. This will help us know
+        // that the page actually exists, so if it is null we can just return!
+        if (pg == null) {
+            return;
+        }
+
+        // We can now mark the page as not dirty since it has been flushed to disk
+        // and is no longer modified in our memory.
+        pg.markDirty(false, null);
+        // Write the page back to the disk
+        Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(pg);
     }
 
     /** Write all pages of the specified transaction to disk.
@@ -242,8 +260,37 @@ public class BufferPool {
      * Flushes the page to disk to ensure dirty pages are updated on disk.
      */
     private synchronized  void evictPage() throws DbException {
-        // some code goes here
-        // not necessary for lab1
+        PageId pidToEvict = null;
+
+        // Looping through our buffer pool to find a clean page to evict.
+        for (PageId pid : idToPg.keySet()) {
+            Page pg = idToPg.get(pid);
+
+            // We need to check if the page is not dirty, as soon as we do
+            // we're going to exit the loop and continue on!
+            if (pg.isDirty() == null) {
+                pidToEvict = pid;
+                break;
+            }
+        }
+
+        // if there are no clean pages, we need to throw an exception to tell us
+        // that all pages in the buffer pool are dirty and needs to flush before
+        // we evict
+        if (pidToEvict == null) {
+            throw new DbException("All pages are dirty, we cannot evict");
+        }
+
+        // Flushing the page selected to disk
+        try {
+            flushPage(pidToEvict);
+        } catch (Exception e) {
+            throw new DbException("Error flushing page during eviction!");
+        }
+
+        // Offically, remove the page from the buffer pool to
+        // make space for our new pages!!
+        idToPg.remove(pidToEvict);
     }
 
 }
