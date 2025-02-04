@@ -1,0 +1,25 @@
+1. Report the runtimes of the queries from Exercise 7. If a query takes a very long time
+to complete, you can report that the query did not complete after running for however
+long you let it run.
+
+2. In your own words, describe what this lab was about:
+Describe the various components that you implemented and how they work. This part needs
+to demonstrate your understanding of the lab! If your description looks like a copy
+paste of the instructions or a copy-paste of the provided documentation you will lose points.
+
+3. Describe any design decisions you made, including your choice of page eviction policy.
+If you used something other than a nested-loops join, describe the tradeoffs of the
+algorithm you chose.
+
+4. Give one example of a unit test that could be added to improve the set of unit tests
+that we provided for this lab. You do not need to write the code of the unit test,
+only describe it in the write-up. If you wrote one or more especially useful new unit-tests,
+you can submit a pull request and we will consider integrating your tests into the lab
+for next year. Pull requests won't get extra credit, only eternal glory if the tests get integrated.
+
+5. Discuss and justify any changes you made to the API.
+
+6. Describe any missing or incomplete elements of your code. If you have any feedback
+for us on the assignment, you can add it to the writeup, send us an email, or make a
+note and paste your note in the course evaluation form at the end of the quarter.
+- No missing/incomplete elements of our code. No feedback as well.
