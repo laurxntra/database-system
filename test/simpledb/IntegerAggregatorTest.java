@@ -16,9 +16,13 @@ public class IntegerAggregatorTest extends SimpleDbTestBase {
   int width1 = 2;
   OpIterator scan1;
   int[][] sum = null;
+  int[][] sumNoGroup = null;
   int[][] min = null;
   int[][] max = null;
+  int[][] count = null;
+  int[][] countNoGroup = null;
   int[][] avg = null;
+  int[][] avgNoGroup = null;
 
   /**
    * Initialize each unit test
@@ -41,6 +45,13 @@ public class IntegerAggregatorTest extends SimpleDbTestBase {
       { 1, 12, 3, 2 }
     };
 
+    this.sumNoGroup = new int[][] {
+            { 2 },
+            { 6 },
+            { 12 },
+            { 14 }
+    };
+
     this.min = new int[][] {
       { 1, 2 },
       { 1, 2 },
@@ -55,11 +66,32 @@ public class IntegerAggregatorTest extends SimpleDbTestBase {
       { 1, 6, 3, 2 }
     };
 
+    this.count = new int[][] {
+            { 1, 1 },
+            { 1, 2 },
+            { 1, 3 },
+            { 1, 3, 3, 1 }
+    };
+
+    this.countNoGroup = new int[][] {
+            { 1 },
+            { 2 },
+            { 3 },
+            { 4 }
+    };
+
     this.avg = new int[][] {
       { 1, 2 },
       { 1, 3 },
       { 1, 4 },
       { 1, 4, 3, 2 }
+    };
+
+    this.avgNoGroup = new int[][] {
+            { 2 },
+            { 3 },
+            { 4 },
+            { 3 }
     };
   }
 
@@ -75,6 +107,18 @@ public class IntegerAggregatorTest extends SimpleDbTestBase {
       OpIterator it = agg.iterator();
       it.open();
       TestUtil.matchAllTuples(TestUtil.createTupleList(width1, step), it);
+    }
+  }
+
+  @Test public void mergeSumNoGroup() throws Exception {
+    scan1.open();
+    IntegerAggregator agg = new IntegerAggregator(-1, null, 1, Aggregator.Op.SUM);
+
+    for (int[] step : sumNoGroup) {
+      agg.mergeTupleIntoGroup(scan1.next());
+      OpIterator it = agg.iterator();
+      it.open();
+      TestUtil.matchAllTuples(TestUtil.createTupleList(1, step), it);
     }
   }
 
@@ -123,6 +167,42 @@ public class IntegerAggregatorTest extends SimpleDbTestBase {
       it = agg.iterator();
       it.open();
       TestUtil.matchAllTuples(TestUtil.createTupleList(width1, step), it);
+    }
+  }
+
+  @Test public void mergeAvgNoGroup() throws Exception {
+    scan1.open();
+    IntegerAggregator agg = new IntegerAggregator(-1, null, 1, Aggregator.Op.AVG);
+
+    for (int[] step : avgNoGroup) {
+      agg.mergeTupleIntoGroup(scan1.next());
+      OpIterator it = agg.iterator();
+      it.open();
+      TestUtil.matchAllTuples(TestUtil.createTupleList(1, step), it);
+    }
+  }
+
+  @Test public void mergeCount() throws Exception {
+    scan1.open();
+    IntegerAggregator agg = new IntegerAggregator(0, Type.INT_TYPE, 1, Aggregator.Op.COUNT);
+
+    for (int[] step : count) {
+      agg.mergeTupleIntoGroup(scan1.next());
+      OpIterator it = agg.iterator();
+      it.open();
+      TestUtil.matchAllTuples(TestUtil.createTupleList(width1, step), it);
+    }
+  }
+
+  @Test public void mergeCountNoGroup() throws Exception {
+    scan1.open();
+    IntegerAggregator agg = new IntegerAggregator(-1, null, 1, Aggregator.Op.COUNT);
+
+    for (int[] step : countNoGroup) {
+      agg.mergeTupleIntoGroup(scan1.next());
+      OpIterator it = agg.iterator();
+      it.open();
+      TestUtil.matchAllTuples(TestUtil.createTupleList(1, step), it);
     }
   }
 

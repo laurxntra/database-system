@@ -1,23 +1,80 @@
 1. Report the runtimes of the queries from Exercise 7. If a query takes a very long time
 to complete, you can report that the query did not complete after running for however
 long you let it run.
+- Query 1: 0.22 seconds
+- Query 2: Waited for 15 minutes and query did not finish running
+- Query 3: Waited for 15 minutes and query did not finish running
 
 2. In your own words, describe what this lab was about:
 Describe the various components that you implemented and how they work. This part needs
 to demonstrate your understanding of the lab! If your description looks like a copy
 paste of the instructions or a copy-paste of the provided documentation you will lose points.
 
+Aggregate/StringAggregator/IntegerAggregator:
+- IntegerAggregator is an aggregator to aggregate over ints. Within the aggregator it knows
+which field to aggregate on and what type of aggregation operator the user asked for, it
+optionally (technically implemented as required but we can pass in a no_grouping value) takes in
+a groupBy field. The possible aggregate operators for IntegerAggregator are
+min, max, avg, sum, and count since these are all standard operations we can do with numbers.
+As we aggregate each tuple, we keep a map of aggregation results which is stored
+inside of aggMap. aggMap is a HashMap where the keys are the different values the groupBy field might have
+(e.g. if groupBy is on a field storing university names, one group value = "UW", another might be "SU")
+and the values are the aggregated values. If the operator is 'avg', then we also store the value away in
+a separate hashmap for calculating averages. If groupBy is applied, aggregates are calculated based on
+their group. Aggregated values can be accessed via the iterator.
+- Similarly, for StringAggregator it is an aggregator over strings. However, the only supported aggregate
+operator for strings is count since we can't take max/min/avg/sum of strings. Just like IntegerAggregator,
+aggregate values are stored in aggMap and there is a groupBy field that allows users to aggregate by certain
+groups. Aggregated values can be accessed via the iterator.
+- For Aggregate, we are given an iterator with all the tuples we want to aggregate, the field we want to
+aggregate on, the groupBy field, and what aggregate operator we should use. Aggregate then delegates
+the aggregation itself to IntegerAggregator or StringAggregator depending on what type the field we want
+to aggregate on is. After IntegerAggregator/StringAggregator is done, Aggregate's iterator is built around
+IntegerAggregator/StringAggregator iterator to give us the aggregation values. User can then access the
+aggregated values using Aggregate's iterator.
+
+Insert/Delete operators:
+- Insert's behavior is to insert all the tuples its given into a specified table. Insert is given
+an OpIterator with all the tuples to insert and the tableId to insert the tuples into. Since we're
+inserting some given tuples into some given table, we need to make sure that the tuples given
+can actually go into the given table by checking both of their TupleDesc and making sure they match.
+After, we can loop through all of the tuples given and insert the tuple into the table via calling
+bufferPool's insertTuple. As we insert, we're also keeping track of how many tuples we've added
+and at the very end when we're done inserting, we return a tuple with a single field holding the number
+of tuples we've added. Additionally, we also check if Insert was already called to prevent inserting
+twice with the same tuples (children). If already called, instead of returning count, we return null
+- Delete is basically identical to Insert except we're deleting instead of inserting. We dont
+need to check if the tuple we're trying to delete and the table's tupleDesc are the same though
+since on delete we're removing it from the table and the tuple's schema doesnt matter. Once we're done
+deleting all the tuples given, we return the number of deleted tuples as a single field tuple. We also
+check if Delete was already called to prevent deleting twice, if already called instead of the count
+we return null.
+
 3. Describe any design decisions you made, including your choice of page eviction policy.
 If you used something other than a nested-loops join, describe the tradeoffs of the
 algorithm you chose.
+
+IntegerAggregator/StringAggregator Operators:
+- Used a hashmap to store aggregated values. With a hashmap we can store the groups as the keys (and if
+there's no groups it'll be stored under key "null" which is still ok bc hashmaps allow null keys) and then the
+aggregated value as the value. To keep track of the average for IntegerAggregator, we also used a hashmap where
+the key again would be the group but the value is a list of ints. We keep track of all the ints of one group so
+we can take those values and average it for storing in the aggregated values map.
 
 4. Give one example of a unit test that could be added to improve the set of unit tests
 that we provided for this lab. You do not need to write the code of the unit test,
 only describe it in the write-up. If you wrote one or more especially useful new unit-tests,
 you can submit a pull request and we will consider integrating your tests into the lab
 for next year. Pull requests won't get extra credit, only eternal glory if the tests get integrated.
+- One additional unit test that can be provided to improve the test suite is testing getting the
+TupleDesc of an aggregate that has no grouping. Currently, in AggregateTest we're only testing
+TupleDescs of aggregates that has grouping. This returns TupleDesc where Type[]'s length is 2,
+one for the groupValue and another for the aggregateValue. We can additionally write a test that
+gives aggregate no grouping and expects the TupleDesc to only have one field to represent the
+aggregateValue.
 
 5. Discuss and justify any changes you made to the API.
+- We made no changes to the API
 
 6. Describe any missing or incomplete elements of your code. If you have any feedback
 for us on the assignment, you can add it to the writeup, send us an email, or make a

@@ -46,7 +46,8 @@ public class Aggregate extends Operator {
         boolean isNoGrouping = gField == Aggregator.NO_GROUPING;
         // if gField is NO_GROUPING, we don't have a type for the group by field
         Type gbFieldType = isNoGrouping ? null : tupleDesc.getFieldType(gfield);
-        this.aggTupleDesc = isNoGrouping ? new TupleDesc(new Type[] { Type.INT_TYPE }) : new TupleDesc(new Type[] { gbFieldType, Type.INT_TYPE });
+        this.aggTupleDesc = isNoGrouping ? new TupleDesc(new Type[] { Type.INT_TYPE }, new String[] { tupleDesc.getFieldName(afield) }) :
+                new TupleDesc(new Type[] { gbFieldType, Type.INT_TYPE }, new String[] { tupleDesc.getFieldName(gfield), tupleDesc.getFieldName(afield) });
 
         if (tupleDesc.getFieldType(afield) == Type.INT_TYPE) {
             aggregator = new IntegerAggregator(gfield, gbFieldType, afield, aggOp);
