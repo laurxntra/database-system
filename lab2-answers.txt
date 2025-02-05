@@ -10,6 +10,36 @@ Describe the various components that you implemented and how they work. This par
 to demonstrate your understanding of the lab! If your description looks like a copy
 paste of the instructions or a copy-paste of the provided documentation you will lose points.
 
+- This lab implemented various functions such as filters, joins, and aggregates, along with operations
+for adding and removing tuples. This also required us to implement an eviction policy. We observed
+how interconnected everything was, especially when working on operations for deleting and inserting
+tuples, which involved dealing with both pages and the buffer pool.
+
+Predicate:
+- This compares tuples to a specific field value. The filter(Tuple t) method we implemented determines whether
+the comparison is true/false. In this method, we use the Tuple.getField() method to retrieve the field number
+from the tuple and compare it to the given operand using the specified operator. The filter() function is crucial
+because it is used in Filter.java’s fetchNext(), which iterates over tuples, applies the predicate,
+and returns the ones that satisfy the condition.
+
+Filter
+- Represents a filter, so any tuples that do not match the predicates are filtered out. Since Filter extends
+Operator and functions as an iterator, we implemented the methods open(), close(), and rewind(),
+to manage the iteration over tuples.
+
+JoinPredicate
+- Similar to Predicate and Filter, JoinPredicate and Join work together as a similar relationship.
+JoinPredicate compares fields of two tuples using a specified predicate and is used by the Join operator
+to determine if tuples from two different relations should be join. The implementation of filter in JoinPredicate
+is similar to the concept in Predicate, allowing it to evaluate whether the fields from two
+tuples match the join condition.
+
+Join
+- JoinPredicate is used by the Join operator to execute a relational join operation. We implemented fetchNext()
+to combine the tuple results of a join onto two tables. This is implemented by a nested loop join by iterating over
+tuples from both child operators. For each tuple from the first relation, it checks against all tuples from the
+second relation to find the matches that satisfy the condition.
+
 Aggregate/StringAggregator/IntegerAggregator:
 - IntegerAggregator is an aggregator to aggregate over ints. Within the aggregator it knows
 which field to aggregate on and what type of aggregation operator the user asked for, it
@@ -32,6 +62,68 @@ the aggregation itself to IntegerAggregator or StringAggregator depending on wha
 to aggregate on is. After IntegerAggregator/StringAggregator is done, Aggregate's iterator is built around
 IntegerAggregator/StringAggregator iterator to give us the aggregation values. User can then access the
 aggregated values using Aggregate's iterator.
+
+HeapPage
+- deleteTuple()
+    - This method is used to remove a specific tuple from the page. It first retrieves the RecordId
+    of the tuple to find the page it resides on and its slot index. The method checks if the tuple belongs
+    to the current page and whether the slot is already empty. If the conditions are met, it deletes the tuple
+    by setting its slot in the tuples[] array to null and marking the slot as unused using the markSlotUsed() method
+- insertTuple()
+    - This method is used to find the first available slot in the page to insert a new tuple. It checks if the page
+    is full or if the tuple descriptor is mismatched by comparing the tuple’s TupleDesc with the page’s TupleDesc
+    and verifies if there are empty slots using getNumEmptySlots(). If the page can be used for insertion, the
+    method will continuously call isSlotUserd() to locate an unused slot. Once an empty slot is found, the method
+    inserts the tuple into the tuples[] array, marks the slot as used with markSlotUsed() and updates the tuple’s
+    RecordId to match its position with the current page.
+- markDirty()
+    - This method marks a page as dirty/not dirty and records the transaction ID of the transaction that made the
+    changes. This is used for maintaining the database during transactions.
+- markSlotUsed()
+    - This method is a helper function used to mark whether a slot in the tuples[] array is used or not.
+    It is essential for both insertTuple() and deleteTuple() to manage slot status correctly.
+- isDirty()
+    - This method returns the transaction ID of the transaction that last marked the page as dirty or null if
+    the page is not dirty. This method helps track the modifications made to a page.
+
+HeapFile
+- insertTuple()
+    - This method is used to insert a specific tuple into the database file while optimizing space.
+    It iterates over all pages in the file to find one with an available slot. For each page, it retrieves
+    the page from the buffer pool with read-write permissions. If the page has an empty slot, the tuple is
+    inserted using the HeapPage’s insertTuple(), and the page must be marked as dirty and added to our list
+    of dirty pages. If no pages with empty slots are found, a new page is created and the tuple is inserted
+    into this new page. The new page is then written to disk using the writePage() function.
+- deleteTuple()
+    - This method is used to delete a specific tuple from the database file. It tracks the pages that have
+    been marked dirty and retrieves the PageId of the tuple to be deleted. It also checks if the page number
+    is within the valid range of pages in the file. If the page number is valid, it retrieves the page using
+    Database.getBufferPool().getPage(tid, pid, Permissions.READ_WRITE). The tuple is deleted from the page
+    using the HeapPage’s deleteTuple() method, and the page is marked as dirty
+
+BufferPool
+- insertTuple()
+    - This method is used to insert a tuple into a table with the specified tableId. It grabs the database file
+     for the specified table from the catalog. Then inserts the tuple into the file, keeping track of the dirty
+     pages returned by the HeapFile’s insertTuple(). For each dirty page, it marks the page as dirty with the tid
+     and adds the dirty pages back to the buffer pool’s hashmap to update the cache.
+- deleteTuple()
+    - This method is used to delete a specific tuple from the database file. It grabs the tableId from the pageId
+    of the tuple’s RecordId, then access the corresponding database file from the catalog. The method calls the
+    HeapFile’s deleteTuple() method to delete the tuple, keeping track of the dirty pages returned. For each
+    dirty page, it checks if the buffer pool is full and if the page is not already in the pool. If the buffer
+    pool is full, it evicts a page to make space. The method then marks that page as dirty with the tid and
+    adds the dirty pages back to the buffer pool’s hashmap.
+- flushPage()
+    - This method writes a specific page to disk if it has been marked as dirty. It grabs the page from the
+    buffer pool using the provided PageId. The method checks if the page is dirty and not null. If the page is
+    not dirty/null, the method returns without any other actions. If the page is dirty, it marks the page as not
+    dirty since it has been flushed to disk and writes the page’s data to disk using writePage()
+- evictPage()
+    - This method a page eviction policy to manage the buffer pool size. It loops through the buffer pool to
+    find a clean page to evict. If a clean page is found, it selects that page for eviction. Once a clean page
+    is found and is selected, the method flushes the page to disk using the flushPage() method and removes the
+    page from the buffer pool to make space for new pages.
 
 Insert/Delete operators:
 - Insert's behavior is to insert all the tuples its given into a specified table. Insert is given
@@ -60,6 +152,17 @@ there's no groups it'll be stored under key "null" which is still ok bc hashmaps
 aggregated value as the value. To keep track of the average for IntegerAggregator, we also used a hashmap where
 the key again would be the group but the value is a list of ints. We keep track of all the ints of one group so
 we can take those values and average it for storing in the aggregated values map.
+
+Page Eviction Policy
+- We chose the Least Recently Used (LRU) policy for page eviction. In the BufferPool file, the evictPage() method
+implements the LRU policy. It loops through the buffer pool to find a clean page to evict. If no clean pages are found,
+an exception is thrown to indicate that all pages are dirty and need to be flushed before eviction. The reason behind
+this is to ensure optimization management of the buffer pool space.
+
+Join Algorithm:
+- Instead of using the nested-loops join, we implemented a hash join algorithm for performing joins. The reason behind
+this is because hash join is efficient with large datasets, so it will allow us to match tuples by hashing them into
+buckets quickly.
 
 4. Give one example of a unit test that could be added to improve the set of unit tests
 that we provided for this lab. You do not need to write the code of the unit test,
