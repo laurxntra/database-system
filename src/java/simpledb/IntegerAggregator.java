@@ -60,7 +60,7 @@ public class IntegerAggregator implements Aggregator {
 
             // if operator is avg, we're keeping track of additional info so we can avg
             if (aggregatorOp == Op.AVG) {
-                avgMap.put(gbField, new ArrayList<>(){{add(tupValue);}});
+                avgMap.put(gbField, new ArrayList<Integer>(){{add(tupValue);}});
             }
             return;
         }
