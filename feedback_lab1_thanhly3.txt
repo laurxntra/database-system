@@ -1,0 +1,16 @@
+Feedback for: thanhly3
+--------------------------------------------------------------
+Total Score (%): 98
+Unit Test Score (out of 32): 32
+System Test Score (out of 4): 4
+Code Score (out of 10): 10
+Writeup Score (out of 10): 8
+--------------------------------------------------------------
+Code Feedback (10/10):
+Nice job!
+(-0): For Catalog, instead of using four concurrent hash maps, you could create a class to organize table metadata (name, db file, primary key), and use a single concurrent hash map for mapping a table ID to this class.
+(-0) For the sake of future labs, I’d suggest using ConcurrentHashMaps instead of HashMaps, especially in BufferPool
+
+Writeup Feedback (8/10):
+Overall, great job!
+(-2): We expect explanations for the functionalities of each class you implemented and the interactions between classes. For example, you did not mention that TupleDesc is the schema for the Tuple or that the HeapPageId helps identify HeapPage objects by mapping table Ids to their associated pages. You should give a general overview of how these classes work/interact with each other, rather than focusing specifically on your low-level implementation.
