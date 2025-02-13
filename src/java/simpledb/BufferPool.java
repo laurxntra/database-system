@@ -26,6 +26,7 @@ public class BufferPool {
     private int numPages;
 
     private HashMap<PageId, Page> idToPg;
+    private LockManager lockManager;
 
     /** Default number of pages passed to the constructor. This is used by
     other classes. BufferPool should use the numPages argument to the
@@ -40,6 +41,7 @@ public class BufferPool {
     public BufferPool(int numPages) {
         this.numPages = numPages;
         this.idToPg = new HashMap<>();
+        this.lockManager = new LockManager();
     }
 
     public static int getPageSize() {
@@ -73,6 +75,18 @@ public class BufferPool {
      */
     public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
+        try {
+            // lockManager.acquireLock checks to see if the lock can be given based on the current
+            // lock status and requested permissions
+            // if our lock can't be acquired right now, then it has to wait until it is notified (in LockManager.java)
+            // so it can proceed.
+            while (!lockManager.acquireLock(tid, pid, perm)) {
+                wait();
+            }
+        } catch (InterruptedException e) {
+            throw new TransactionAbortedException();
+        }
+
         if (idToPg.get(pid) == null) {
 
             // If not enough space evict page!
@@ -97,8 +111,7 @@ public class BufferPool {
      * @param pid the ID of the page to unlock
      */
     public  void releasePage(TransactionId tid, PageId pid) {
-        // some code goes here
-        // not necessary for lab1|lab2
+        lockManager.releasePage(tid, pid);
     }
 
     /**
@@ -113,9 +126,7 @@ public class BufferPool {
 
     /** Return true if the specified transaction has a lock on the specified page */
     public boolean holdsLock(TransactionId tid, PageId p) {
-        // some code goes here
-        // not necessary for lab1|lab2
-        return false;
+        return lockManager.holdsLock(tid, p);
     }
 
     /**
