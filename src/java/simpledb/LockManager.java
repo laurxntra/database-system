@@ -77,52 +77,57 @@ public class LockManager {
         if (!tidToPg.containsKey(tid)) {
             tidToPg.put(tid, new HashSet<>());
         }
+        // Adds the page to the set of pages locked by our transaction
+        tidToPg.get(tid).add(pid);
+
         // Initializes our set of transactions holding locks on the page if not already exists
          if(!pgToTid.containsKey(pid)) {
              pgToTid.put(pid, new HashSet<>());
          }
 
-         // Updates the permission for our page
-         pgToPerm.put(pid, perm);
-         // Adds the transaction to the set of transactions holding locks on their page
-         pgToTid.get(pid).add(tid);
-         // Adds the page to the set of pages locked by our transaction
-         tidToPg.get(tid).add(pid);
-         // notifies all that they can continue
-         notifyAll();
-         return true;
+        // Adds the transaction to the set of transactions holding locks on their page
+        pgToTid.get(pid).add(tid);
+
+        // Updates the permission for our page
+        pgToPerm.put(pid, perm);
+
+        // notifies all that they can continue
+        notifyAll();
+        return true;
     }
 
     /*
      * Helper function for BufferPool's releasePage() method
      */
     public synchronized boolean releasePage(TransactionId tid, PageId pid) {
+        Set<PageId> pages = tidToPg.get(tid);
         // Checks to see if the transaction has a set of pages it has locked
         // and if it holds the lock on the specific page
-        if (!tidToPg.containsKey(tid) || !tidToPg.get(tid).contains(pid)) {
+        if (pages == null || !pages.contains(pid)) {
             return false;
         }
 
+        Set<TransactionId> tids = pgToTid.get(pid);
         // Checks to see if the page has a set of transactions holding locks
         // and if the transaction is in that particular set
-        if(!pgToTid.containsKey(pid) || !pgToTid.get(pid).contains(tid)) {
+        if(tids == null || !tids.contains(tid)) {
             return false;
         }
 
         // we need to remove the page from the set of pages locked by our transaction
-        tidToPg.get(tid).remove(pid);
+        pages.remove(pid);
 
         // if the transaction does not have any pages locked, then we can remove
         // our transaction
-        if (tidToPg.get(tid).isEmpty()) {
+        if (pages.isEmpty()) {
             tidToPg.remove(tid);
         }
         // we need to remove the transaction from the set of transactions holding locks on our page
-        pgToTid.get(pid).remove(tid);
+        tids.remove(tid);
 
         // if our transactions are holding a lock on the page, then we need
         // to remove the page and its permissions
-        if(pgToTid.get(pid).isEmpty()) {
+        if(tids.isEmpty()) {
             pgToTid.remove(pid);
             pgToPerm.remove(pid);
         }
