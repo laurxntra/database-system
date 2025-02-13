@@ -34,26 +34,20 @@ public class LockManager {
             return true;
         }
 
+        Permissions currPerm = pgToPerm.get(pid);
+
         // we need to check if the current permissions on the page is READ_ONLY, if so, we need
         // to look deeper!
-        if (pgToPerm.get(pid).equals(Permissions.READ_ONLY)) {
-            // If the requesting permissions are also READ_ONLY, then the lock can be done
-            if(perm.equals(Permissions.READ_ONLY)) {
-                return true;
+        if (currPerm == Permissions.READ_ONLY) {
+            // Give the lock if the requested permissions are READ_ONLY or if the requesting
+            // transaction already holds a lock on the page and there is no more than 1 transaction
+            // holding a lock on it
+            return perm == Permissions.READ_ONLY ||
+                    (pgToTid.containsKey(pid) && pgToTid.get(pid).contains(tid) && pgToTid.get(pid).size() < 2);
             } else {
-                // If our pgToTid has the pid and at least two transactions hold the lock, then
-                // to upgrade would not be possible. We are also checking to see if the requesting
-                // transaction holds the READ_ONLY lock as well
-                return !(pgToTid.containsKey(pid) && pgToTid.get(pid).size() >= 2) && pgToTid.get(pid).contains(tid);
+                // we give a lock if the requesting transaction already holds a lock on a page
+                return pgToTid.containsKey(pid) && pgToTid.get(pid).contains(tid);
             }
-        } else {
-            // Our current lock is READ_WRITE
-            // we need to check if the requesting transaction holds the lock,
-            // if so the lock can be given if the requesting transaction already holds
-            // the READ_ONLY lock on the page.
-            return pgToTid.get(pid).contains(tid);
-        }
-
     }
 
     /*
