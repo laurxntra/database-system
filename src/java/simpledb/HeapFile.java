@@ -112,6 +112,8 @@ public class HeapFile implements DbFile {
     }
 
     // see DbFile.java for javadocs
+    // insertTuple uses bufferPool.getPage() which acquires lock from LockManager
+    // we give bufferPool READ_WRITE perms bc it needs permission to insert aka write
     public ArrayList<Page> insertTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
         // This method is for inserting a specific tuple into the database file
@@ -150,6 +152,8 @@ public class HeapFile implements DbFile {
     }
 
     // see DbFile.java for javadocs
+    // deleteTuple uses bufferPool.getPage() which acquires lock from LockManager
+    // we give bufferPool READ_WRITE perms bc it needs permission to delete aka write
     public ArrayList<Page> deleteTuple(TransactionId tid, Tuple t) throws DbException,
             TransactionAbortedException {
         // This method is for deleting a specific tuple in the database file
@@ -172,6 +176,8 @@ public class HeapFile implements DbFile {
     }
 
     // see DbFile.java for javadocs
+    // iterator uses bufferPool.getPage() which acquires lock from LockManager
+    // we give bufferPool READ_ONLY perms bc the iterator doesn't need to update/write
     public DbFileIterator iterator(TransactionId tid) {
 
         return new DbFileIterator() {
