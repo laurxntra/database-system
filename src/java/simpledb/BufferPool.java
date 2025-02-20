@@ -5,7 +5,7 @@ import java.io.*;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -120,8 +120,7 @@ public class BufferPool {
      * @param tid the ID of the transaction requesting the unlock
      */
     public void transactionComplete(TransactionId tid) throws IOException {
-        // some code goes here
-        // not necessary for lab1|lab2
+        transactionComplete(tid, true);
     }
 
     /** Return true if the specified transaction has a lock on the specified page */
@@ -138,8 +137,29 @@ public class BufferPool {
      */
     public void transactionComplete(TransactionId tid, boolean commit)
         throws IOException {
-        // some code goes here
-        // not necessary for lab1|lab2
+        // we're committing so we want to flush dirty pages associated with the transaction
+        if (commit) {
+            flushPages(tid);
+        // we're aborting so we want to revert any changes made by the transaction
+        } else {
+            // we check every page in bufferPool, if it is dirty due to this transaction we replace it in bufferPool
+            // with the on-disk page to restore it
+            for (PageId pid : idToPg.keySet()) {
+                HeapPage page = (HeapPage) idToPg.get(pid);
+                if (page == null) continue;
+                if (page.isDirty() == tid) {
+                    idToPg.put(pid, Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid));
+                }
+            }
+        }
+
+        // regardless of commit or abort, we want to release any locks BufferPool was managing regarding
+        // this transaction so we check if a page holds a lock relating to this tid, and if it does, release it
+        for (PageId pid : idToPg.keySet()) {
+            if (holdsLock(tid, pid)) {
+                releasePage(tid, pid);
+            }
+        }
     }
 
     /**
@@ -214,8 +234,11 @@ public class BufferPool {
      *     break simpledb if running in NO STEAL mode.
      */
     public synchronized void flushAllPages() throws IOException {
-        // some code goes here
-        // not necessary for lab1
+        for (PageId pid : idToPg.keySet()) {
+            HeapPage page = (HeapPage) idToPg.get(pid);
+            if (page == null) continue;
+            if (page.isDirty() != null) flushPage(pid);
+        }
 
     }
 
@@ -262,8 +285,13 @@ public class BufferPool {
     /** Write all pages of the specified transaction to disk.
      */
     public synchronized  void flushPages(TransactionId tid) throws IOException {
-        // some code goes here
-        // not necessary for lab1|lab2
+        // for every page in bufferPool, we check if the page is dirty due to this transaction and if it is
+        // we flush the page to disk
+        for (PageId pid : idToPg.keySet()) {
+            HeapPage page = (HeapPage) idToPg.get(pid);
+            if (page == null) continue;
+            if (page.isDirty() == tid ) flushPage(pid);
+        }
     }
 
     /**
