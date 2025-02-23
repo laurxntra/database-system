@@ -1,0 +1,17 @@
+Feedback for: thanhly3
+--------------------------------------------------------------
+Total Score (%): 98.5
+Unit Test Score (out of 32): 38
+System Test Score (out of 4): 24
+Code Score (out of 10): 9
+Writeup Score (out of 10): 9.5
+--------------------------------------------------------------
+Code Feedback (9/10):
+Great job overall on the code!
+(-1) Before adding a page to BufferPool in insertTuple or deleteTuple, make sure to check whether the buffer pool is full and needs to evict a page.
+(-0) Just a note that in Integer/StringAggregator, you can actually use TupleIterator instead of creating your own AggregatorIterator.
+
+Writeup Feedback (9.5/10):
+Great job explaining the lab and your design choices in detail! 
+(-0.5) Rather than describing the low level methods, it would be better to describe the general idea of each component in the system, and how they interact
+(-0) Did not explain your implementation/design choice when join condition was not an ‘EQUALS’ predicate.
