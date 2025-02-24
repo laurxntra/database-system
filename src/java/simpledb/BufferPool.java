@@ -83,7 +83,7 @@ public class BufferPool {
             while (!lockManager.acquireLock(tid, pid, perm)) {
                 wait();
             }
-        } catch (InterruptedException e) {
+        } catch (Exception e) {
             throw new TransactionAbortedException();
         }
 
@@ -154,12 +154,8 @@ public class BufferPool {
         }
 
         // regardless of commit or abort, we want to release any locks BufferPool was managing regarding
-        // this transaction so we check if a page holds a lock relating to this tid, and if it does, release it
-        for (PageId pid : idToPg.keySet()) {
-            if (holdsLock(tid, pid)) {
-                releasePage(tid, pid);
-            }
-        }
+        // this transaction
+        lockManager.releaseAllLocks(tid);
     }
 
     /**
@@ -251,8 +247,7 @@ public class BufferPool {
         are removed from the cache so they can be reused safely
     */
     public synchronized void discardPage(PageId pid) {
-        // some code goes here
-        // not necessary for lab1
+        idToPg.remove(pid);
     }
 
     /**

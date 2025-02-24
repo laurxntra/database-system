@@ -15,12 +15,14 @@ public class LockManager {
     private Map<PageId, Set<TransactionId>> pgToTid;
     private Map<PageId, Permissions> pgToPerm;
     private Map<TransactionId, PageId> acquireLock;
+    private Map<TransactionId, HashSet<TransactionId>> tidToWaitingForTid;
 
     public LockManager() {
         this.tidToPg = new HashMap<>();
         this.pgToTid = new HashMap<>();
         this.pgToPerm = new HashMap<>();
         this.acquireLock = new HashMap<>();
+        this.tidToWaitingForTid = new HashMap<>();
     }
 
     /*
@@ -34,6 +36,7 @@ public class LockManager {
             return true;
         }
 
+        // the permissions that are already on the page
         Permissions currPerm = pgToPerm.get(pid);
 
         // we need to check if the current permissions on the page is READ_ONLY, if so, we need
@@ -42,29 +45,47 @@ public class LockManager {
             // Give the lock if the requested permissions are READ_ONLY or if the requesting
             // transaction already holds a lock on the page and there is no more than 1 transaction
             // holding a lock on it
-            return perm == Permissions.READ_ONLY ||
-                    (pgToTid.containsKey(pid) && pgToTid.get(pid).contains(tid) && pgToTid.get(pid).size() < 2);
+            if (perm == Permissions.READ_ONLY ||
+                    (pgToTid.containsKey(pid) && pgToTid.get(pid).contains(tid) && pgToTid.get(pid).size() < 2)) {
+                return true;
             } else {
-                // we give a lock if the requesting transaction already holds a lock on a page
-                return pgToTid.containsKey(pid) && pgToTid.get(pid).contains(tid);
+                // check who holds the lock to the requested pg and add it to waitingMap
+                Set<TransactionId> tidsHoldingLock = pgToTid.get(pid);
+                HashSet<TransactionId> tidsToWaitOn = tidToWaitingForTid.getOrDefault(tid, new HashSet<>());
+
+                tidsToWaitOn.addAll(tidsHoldingLock);
+                tidToWaitingForTid.put(tid, tidsToWaitOn);
+                return false;
             }
+        } else {
+                // we give a lock if the requesting transaction already holds a lock on a page
+                if (pgToTid.containsKey(pid) && pgToTid.get(pid).contains(tid) && pgToPerm.get(pid).equals(Permissions.READ_WRITE)) {
+                    return true;
+                } else {
+                    // check who holds the lock to the requested pg and add it to waitingMap
+                    Set<TransactionId> tidsHoldingLock = pgToTid.get(pid);
+                    HashSet<TransactionId> tidsToWaitOn = tidToWaitingForTid.getOrDefault(tid, new HashSet<>());
+
+                    tidsToWaitOn.addAll(tidsHoldingLock);
+                    tidToWaitingForTid.put(tid, tidsToWaitOn);
+                    return false;
+                }
+        }
     }
 
     /*
      * Acquires a lock for a transaction page
      */
-    public synchronized boolean acquireLock(TransactionId tid, PageId pid, Permissions perm) throws TransactionAbortedException {
+    public synchronized boolean acquireLock(TransactionId tid, PageId pid, Permissions perm) throws TransactionAbortedException, InterruptedException {
         // loops until the lock can be acquired
         // Our lockStats method helps check if the lock can be granted based on lock status and
         // permission requests. If the lock can't be done, then it waits until it has been notified
         // that it can proceed!
         while (!lockStats(tid, pid, perm)) {
-            try {
-                // waiting for lock to be acquired...
-                wait();
-            } catch (InterruptedException e) {
+            if (isDeadlock()) {
                 throw new TransactionAbortedException();
             }
+            wait();
         }
 
         // Initializes our set of pages locked by the transaction if not already exists
@@ -94,14 +115,18 @@ public class LockManager {
      * Helper function for BufferPool's releasePage() method
      */
     public synchronized boolean releasePage(TransactionId tid, PageId pid) {
+        // the pages given tid has locks on
         Set<PageId> pages = tidToPg.get(tid);
+
         // Checks to see if the transaction has a set of pages it has locked
         // and if it holds the lock on the specific page
         if (pages == null || !pages.contains(pid)) {
             return false;
         }
 
+        // the tids that have locks on this page
         Set<TransactionId> tids = pgToTid.get(pid);
+
         // Checks to see if the page has a set of transactions holding locks
         // and if the transaction is in that particular set
         if(tids == null || !tids.contains(tid)) {
@@ -116,6 +141,7 @@ public class LockManager {
         if (pages.isEmpty()) {
             tidToPg.remove(tid);
         }
+
         // we need to remove the transaction from the set of transactions holding locks on our page
         tids.remove(tid);
 
@@ -144,6 +170,69 @@ public class LockManager {
 
         // returns true if the transaction holds a lock on the page!!
         return pgHasTransactionLock && transactionHasPgLock;
+    }
+
+    // releases all locks a given tid has
+    public synchronized void releaseAllLocks(TransactionId tid) {
+        Set<PageId> pages = tidToPg.get(tid); // pages this tid is locking
+        if (pages != null) {
+            // making a copy bc in releasePage we remove from tidToPg which causes concurrent exceptions
+            Set<PageId> pagesCopy = new HashSet<>(pages);
+            for (PageId pid : pagesCopy) {
+                // we release all the pages this tid is locking
+                releasePage(tid, pid);
+            }
+        }
+
+
+        // for all tids that are waiting on other tids before it can get its lock, we remove ourselves from that set
+        // of tids
+        for (TransactionId tidKey : tidToWaitingForTid.keySet()) {
+            if (!tidKey.equals(tid)) {
+                tidToWaitingForTid.get(tidKey).remove(tid);
+            }
+        }
+
+        // we remove ourselves (this tid) from the set of keys bc we're no longer waiting on anything
+        tidToWaitingForTid.remove(tid);
+    }
+
+    private synchronized boolean isDeadlock() {
+        Set<TransactionId> visited = new HashSet<>();
+        Set<TransactionId> recursionStack = new HashSet<>();
+
+        for (TransactionId tid : tidToWaitingForTid.keySet()) {
+            if (!visited.contains(tid)) {
+                if (isCyclic(tid, visited, recursionStack)) {
+                    // theres a deadlock
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private synchronized boolean isCyclic(TransactionId tid, Set<TransactionId> visited, Set<TransactionId> recursionStack) {
+            if (recursionStack.contains(tid)) {
+                return true;
+            }
+
+            if (visited.contains(tid)) {
+                return false;
+            }
+
+            recursionStack.add(tid);
+            visited.add(tid);
+
+            for (TransactionId tid2 : tidToWaitingForTid.getOrDefault(tid, new HashSet<>())) {
+                if (isCyclic(tid2, visited, recursionStack)) {
+                    return true;
+                }
+            }
+
+            recursionStack.remove(tid);
+            return false;
     }
 
 }
