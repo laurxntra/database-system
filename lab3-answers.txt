@@ -1,0 +1,94 @@
+In your own words, describe what this lab was about: Describe the various components that you implemented and
+how they work. This part needs to demonstrate your understanding of the lab! If your description looks like a
+copy paste of the instructions or a copy-paste of the provided documentation you will lose points.
+
+This lab involved building a simple locking-based transaction system in SimpleDb. We were required to implement lock
+and unlock operations in our code, as well as managing the locks held by each transaction and ensure that locks are
+granted to transactions when necessary.
+
+
+LockManager – Manages the locks on pages, ensuring transactions are safely and correctly access and modify data
+without conflicts (this entire file, is almost like a helper file for our BufferPool)
+
+    - lockStats() – Helps determine if a transaction can acquire the desired lock on a page.
+      This method checks if the page already has a lock and whether the current permissions
+      allow for the requested lock. If the page is not locked, the lock can be granted. If
+      the page has a READ_ONLY lock, the method further checks if the requested permissions are also
+      READ_ONLY or if the transaction already holds a lock on the page, ensuring only one transaction
+      holds the lock at a time.
+
+    - acquireLock() – Responsible for granting locks to transactions on specific pages while ensuring data
+      consistency and preventing conflicts. This method checks if the requested lock can be granted using the
+      lockStats() method. If the lock can not be granted right away, the transaction is put into a waiting state
+      using wait() until it is notified that the lock is available. Once the lock can be acquired, the method
+      initializes and updates data to track the locks held by each transaction and the transactions holding locks
+      on each page. It updates the set of pages locked by the transaction, transactions holding locks on the page,
+      and the permissions for the page. It uses notifyAll() once the lock has been granted, allowing other waiting
+      transactions to continue.
+
+    - releasePage() – Helps manage the release of locks held by transactions. This method checks if the transaction
+      has locked the specific page by verifying the sets of locked pages and transactions. If the page is locked by
+      the transaction, then the method will remove the page from the set of pages locked by the transactions, and if
+      no pages remain, it removes the transaction entirely.  It also will remove the transaction from the set of
+      transactions holding locks on the page and, if no transactions remain, removes the page and its associated
+      permissions. It will also notifyAll() to let the other waiting transactions continue.
+
+    - holdsLock() – Verifies whether a transaction holds a lock on a specific page. This method does this by verifying
+      two conditions: if the page has a set of transactions holding locks AND if the specific transaction is part of
+      that set, and if the transaction has a set of pages it has locked and if the specific page is among them.
+      By confirming these conditions, the method determines if the transaction holds the lock on the page.
+
+getPage() - This method ensures that the appropriate lock is acquired before a page is accessed, maintaining
+the 2PL protocol. It attempts to acquire a lock on the specified page using lockManager.acquireLock().
+If the lock can not be acquired right away, the transaction waits until the lock becomes available.
+Once the lock is acquired, the method checks if the page is already in the buffer pool. If not, then it adds
+the page to the buffer pool, handling evictions, and then returns the page.
+
+heapfile.iterator() - This method provides an iterator to traverse through the tuples in a HeapFile, making sure
+that a READ_ONLY lock is acquired on each page before accessing its tuples. The iterator initializes the page number
+and updates the fields to acquire the page lock. It iterates through the tuples, checking for the next available
+tuple, and releases the lock when done/closed. The purpose of this is to ensure the transaction is going with the
+strict 2PL protocol.
+
+insertTuple() - This method inserts a tuple into the database file, making sure that the appropriate lock is
+acquired before modifying the pages. It loops through the pages in the file, attempting to acquire a READ_WRITE
+lock on each page. If an empty slot is found, the tuple is inserted, and the page is marked dirty. If no empty slot
+is found, a new page is created for the tuple, and the tuple is inserted.
+
+deleteTuple() - Deletes a tuple from the database file, making sure that the appropriate lock is acquired before
+modifying the pages. It checks if the page containing the tuple exists within the valid page range. It then acquires
+a READ_WRITE lock on the page, deletes the tuple, marks the page dirty, and returns the modified page.
+
+evictPage() - Manages the eviction of pages without evicting dirty pages, adhering to the NO STEAL policy. This method
+loops through the buffer pool to identify a clean page suitable for eviction. If a clean page is found, it is selected
+for eviction. If all pages in the buffer pool are dirty, the method will then throw a DbException indicating there
+are no clean pages available for eviction. Once a clean page is found, this method flushes the page to disk to ensure
+any changes are saved. It then removes the page from the buffer pool to make space for new pages. This makes sure
+that all dirty pages, which contain uncommitted modifications are not evicted.
+
+Describe a unit test that could be added to improve the set of unit tests that we provided for this lab.
+
+
+Describe any design decisions you made, including your deadlock detection policy, locking granularity, etc.
+Lock Management
+    - One of the key designs we made was to implement LockManager in a separate file rather than integrating it
+      directly within BufferPool.java. The reason behind this was purely for readability. To keep the locking
+      logic separate from the buffer pool logic so it would be easier for both of us to easily understand and
+      modify the locking mechanisms without going through the entire bufferpool code.
+
+    - In LockManager, we used HashMap and HashSet structures to track locks held by transactions and the transactions
+      holding locks on pages. The reason behind this is because it helps provide access and manipulation of
+      lock information.
+
+- We used synchronized methods in the LockManager to ensure thread safety. Synchronization can help with managing locks.
+
+- We used wait() and notifyAll() to manage lock acquisition and release. Wait() allows a transaction to wait until the
+desired lock becomes available, while notifyAll() allows all the waiting threads to continue once the lock is released.
+
+
+Discuss and justify any changes you made to the API.
+
+If you have any feedback for us on the assignment, you can add it to the writeup, send us an email,
+or make a note and paste your note in the course evaluation form at the end of the quarter.
+N/A
+
