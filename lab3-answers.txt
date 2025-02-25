@@ -1,4 +1,4 @@
-In your own words, describe what this lab was about: Describe the various components that you implemented and
+(1) In your own words, describe what this lab was about: Describe the various components that you implemented and
 how they work. This part needs to demonstrate your understanding of the lab! If your description looks like a
 copy paste of the instructions or a copy-paste of the provided documentation you will lose points.
 
@@ -66,10 +66,30 @@ are no clean pages available for eviction. Once a clean page is found, this meth
 any changes are saved. It then removes the page from the buffer pool to make space for new pages. This makes sure
 that all dirty pages, which contain uncommitted modifications are not evicted.
 
-Describe a unit test that could be added to improve the set of unit tests that we provided for this lab.
+Aside from lock management via the LockManager, this lab was also about detecting and navigating deadlocks. Deadlocks
+can be detected by keeping a graph that tracks which transactions are waiting on which before they can acquire their lock
+or via timing out once we wait for some x time and decide that something is probably deadlocked. We chose to do a cycle
+detection using DFS. isDeadlock() is the wrapper function which calls isCyclic() to detect cycles. It would return
+true all the way up if a deadlock is found which we will then deal with.
+Once we detect a deadlock, we can either abort ourselves or abort everything else to let ourselves get all the locks
+we need. We chose to abort ourselves so that meant releasing all the locks that we're currently holding on to and
+removing ourselves from the graph so that everyone else can continue on.
 
+Regardless if a transaction aborts or commits, we need to finish and clean things up. In transactionComplete(), when
+the transaction successfully commits, we flush all the pages that were touched by the transaction into disk, then
+we release all the locks related to this transaction. For abort, we find the pages that were modified by this transaction
+and replaced them with the on-disk state since the transaction failed to commit and we need to rollback. We also
+relase all the locks related to this transaction on abort since its been aborted, we need to clean up.
 
-Describe any design decisions you made, including your deadlock detection policy, locking granularity, etc.
+(2) Describe a unit test that could be added to improve the set of unit tests that we provided for this lab.
+- An additional test that can improve the set of unit tests provided is another in LockingTest.java
+where rather than acquiring then releasing, then acquiring again for the same page (like in acquireThenRelease)
+we first acquire locks for multiple pages say like `bp.getPage(tid1, p0, Permissions.READ_WRITE);` and
+`bp.getPage(tid2, p2, Permissions.READ_WRITE);` and `bp.getPage(tid3, p3, Permissions.READ_WRITE);` without unlocking
+them. Then we unlock p2 and check that we cant get locks for p1 and p3, but we can get a lock for p2. This
+tests that upon unlocking, we not only unlock the right page but we also arent unlocking everything by mistake.
+
+(3) Describe any design decisions you made, including your deadlock detection policy, locking granularity, etc.
 Lock Management
     - One of the key designs we made was to implement LockManager in a separate file rather than integrating it
       directly within BufferPool.java. The reason behind this was purely for readability. To keep the locking
@@ -85,10 +105,19 @@ Lock Management
 - We used wait() and notifyAll() to manage lock acquisition and release. Wait() allows a transaction to wait until the
 desired lock becomes available, while notifyAll() allows all the waiting threads to continue once the lock is released.
 
+- For deadlock detection we decided to do a cycle detection. It was mentioned in lecture that a time-out policy
+would've taken a lot of fine-tuning. We weren't sure how long that process would take so we thought it'd be easier if
+we just implemented a cycle detection since we've learned before that we can detect cycles using DFS which is
+what we implemented.
 
-Discuss and justify any changes you made to the API.
+- For deadlock resolution we decided on aborting ourselves. Aborting everyone else seems a bit volatile, and we just
+thought aborting ourselves would be more straightforward.
 
-If you have any feedback for us on the assignment, you can add it to the writeup, send us an email,
+
+(4) Discuss and justify any changes you made to the API.
+N/A
+
+(5) If you have any feedback for us on the assignment, you can add it to the writeup, send us an email,
 or make a note and paste your note in the course evaluation form at the end of the quarter.
 N/A
 
