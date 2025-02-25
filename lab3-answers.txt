@@ -44,27 +44,30 @@ If the lock can not be acquired right away, the transaction waits until the lock
 Once the lock is acquired, the method checks if the page is already in the buffer pool. If not, then it adds
 the page to the buffer pool, handling evictions, and then returns the page.
 
-heapfile.iterator() - This method provides an iterator to traverse through the tuples in a HeapFile, making sure
-that a READ_ONLY lock is acquired on each page before accessing its tuples. The iterator initializes the page number
-and updates the fields to acquire the page lock. It iterates through the tuples, checking for the next available
-tuple, and releases the lock when done/closed. The purpose of this is to ensure the transaction is going with the
-strict 2PL protocol.
+heapfile.iterator() – provides an iterator to traverse through the pages in a HeapFile, ensuring that a READ_ONLY
+lock is acquired on each page before accessing its tuples. The iterator initializes the page number and updates the
+fields to acquire the page lock. It iterates through the pages, checking for the next available page and its tuples,
+and releases the lock when done/closed. The purpose of this is to ensure the transaction adheres to the strict 2PL
+protocol
 
-insertTuple() - This method inserts a tuple into the database file, making sure that the appropriate lock is
-acquired before modifying the pages. It loops through the pages in the file, attempting to acquire a READ_WRITE
-lock on each page. If an empty slot is found, the tuple is inserted, and the page is marked dirty. If no empty slot
-is found, a new page is created for the tuple, and the tuple is inserted.
+insertTuple() – inserts a tuple into the database file, ensuring that the appropriate lock is acquired before
+modifying the pages. It loops through the page in the file, attempting to acquire a READ_WRITE lock on each page.
+If an empty slot is found, the tuple is inserted, and the page is marked dirty. If no empty slot is found, a new
+page is created for the tuple, and the tuple is inserted. This helps maintain transaction consistency by acquiring
+locks at the page level and ensures the transaction adheres to the strict 2PL protocol.
 
-deleteTuple() - Deletes a tuple from the database file, making sure that the appropriate lock is acquired before
-modifying the pages. It checks if the page containing the tuple exists within the valid page range. It then acquires
-a READ_WRITE lock on the page, deletes the tuple, marks the page dirty, and returns the modified page.
+deleteTuple() – deletes a tuple from the database file, ensuring that the appropriate lock is acquired before
+modifying the pages. It checks if the page containing the tuple exists within the valid page range and then
+acquires a READ_WRITE lock on the page. The tuple is deleted, the page is marked dirty, and the modified page is
+returned. This helps maintain transaction consistency by acquiring locks at the page level and ensuring the
+transaction adheres to the strict 2PL protocol
 
-evictPage() - Manages the eviction of pages without evicting dirty pages, adhering to the NO STEAL policy. This method
-loops through the buffer pool to identify a clean page suitable for eviction. If a clean page is found, it is selected
-for eviction. If all pages in the buffer pool are dirty, the method will then throw a DbException indicating there
-are no clean pages available for eviction. Once a clean page is found, this method flushes the page to disk to ensure
-any changes are saved. It then removes the page from the buffer pool to make space for new pages. This makes sure
-that all dirty pages, which contain uncommitted modifications are not evicted.
+evictPage() - manages the eviction of pages without evicting dirty pages, adhering to the NO STEAL policy.
+This method loops through the buffer pool to identify a clean page suitable for eviction. If a clean page is found,
+it is going to be evicted. If all pages in the buffer pool are dirty, the method throws a DbException indicating
+there are no more clean pages available for eviction. Once a clean page is found the method flushes the page to disk.
+It then removes the page from the buffer pool to make space for new pages. This makes sure that the maintenance of
+the transaction is consistent.
 
 Aside from lock management via the LockManager, this lab was also about detecting and navigating deadlocks. Deadlocks
 can be detected by keeping a graph that tracks which transactions are waiting on which before they can acquire their lock
