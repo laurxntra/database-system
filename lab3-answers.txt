@@ -94,6 +94,10 @@ tests that upon unlocking, we not only unlock the right page but we also arent u
 
 (3) Describe any design decisions you made, including your deadlock detection policy, locking granularity, etc.
 Lock Management
+    - Regarding locking granularity, we chose to lock pages rather than table-level or tuple-level. We thought
+    that locking tuple-level might be difficult to manage and table-level would've been too broad of a lock that would
+    significantly slow down transactions so we opted for page-level locking.
+
     - One of the key designs we made was to implement LockManager in a separate file rather than integrating it
       directly within BufferPool.java. The reason behind this was purely for readability. To keep the locking
       logic separate from the buffer pool logic so it would be easier for both of us to easily understand and
