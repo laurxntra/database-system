@@ -1,6 +1,7 @@
 
 package simpledb;
 
+import javax.xml.crypto.Data;
 import java.io.*;
 import java.util.*;
 import java.lang.reflect.*;
@@ -466,7 +467,45 @@ public class LogFile {
         synchronized (Database.getBufferPool()) {
             synchronized(this) {
                 preAppend();
-                // some code goes here
+
+                // We need to determine where in the log file the transaction's records begin..
+                long beginOf = this.tidToFirstLogRecord.get(tid.getId());
+                // so we need to set the file ptr to start at the transaction's records
+                // in the log file
+                raf.seek(beginOf);
+
+                while (true) {
+                    try {
+                        // we will read the type of the current log record and the tid associated with it
+                        int recType = raf.readInt();
+                        long recTid = raf.readLong();
+
+                        // if our record indicates an update is being made by a transaction, then...
+                        if (recType == UPDATE_RECORD) {
+                            // we need to read the type of the current log and the tid associated with it
+                            Page beforeState = readPageData(raf);
+                            Page afterState = readPageData(raf);
+
+                            // now, we need to check if this update actually belongs to the transaction
+                            if (recTid == tid.getId()) {
+                                // so we grab the database file that has the affected page
+                                DbFile f = Database.getCatalog().getDatabaseFile(beforeState.getId().getTableId());
+                                // write the before state of the page back to the db
+                                f.writePage(beforeState);
+                                // then discard the after state of the page from the bufferpool
+                                Database.getBufferPool().discardPage(afterState.getId());
+                            }
+
+                        } else {
+                            // skipping any data that is non-update records
+                            raf.readLong();
+                        }
+
+                    } catch (EOFException e) {
+                        break;
+                    }
+                }
+
             }
         }
     }

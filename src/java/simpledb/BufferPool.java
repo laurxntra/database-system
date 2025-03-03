@@ -5,6 +5,7 @@ import java.io.*;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -24,6 +25,7 @@ public class BufferPool {
 
     private static int pageSize = DEFAULT_PAGE_SIZE;
     private int numPages;
+
 
     private HashMap<PageId, Page> idToPg;
     private LockManager lockManager;
@@ -137,15 +139,32 @@ public class BufferPool {
      */
     public void transactionComplete(TransactionId tid, boolean commit)
         throws IOException {
-        // we're committing so we want to flush dirty pages associated with the transaction
+        // if the transaction is being comitted...
         if (commit) {
-            flushPages(tid);
+
+            // we will need to iterate through all the pages in the bufferpool
+            for (PageId pid : idToPg.keySet()) {
+                Page page = idToPg.get(pid);
+
+                // we will skip pages that are null/not dirty by the transaction
+                if (page == null || page.isDirty() != tid) {
+                    continue;
+                }
+
+                // logging the change for the dirty page with its before & after...
+                Database.getLogFile().logWrite(tid, page.getBeforeImage(), page);
+
+                // updates the pages before image to reflect its committed state!!
+                page.setBeforeImage();
+            }
+
         // we're aborting so we want to revert any changes made by the transaction
         } else {
             // we check every page in bufferPool, if it is dirty due to this transaction we replace it in bufferPool
             // with the on-disk page to restore it
             for (PageId pid : idToPg.keySet()) {
-                HeapPage page = (HeapPage) idToPg.get(pid);
+                Page page = idToPg.get(pid);
+                Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid);
                 if (page == null) continue;
                 if (page.isDirty() == tid) {
                     idToPg.put(pid, Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid));
@@ -156,6 +175,7 @@ public class BufferPool {
         // regardless of commit or abort, we want to release any locks BufferPool was managing regarding
         // this transaction
         lockManager.releaseAllLocks(tid);
+
     }
 
     /**
@@ -257,6 +277,12 @@ public class BufferPool {
     private synchronized  void flushPage(PageId pid) throws IOException {
         Page pg = idToPg.get(pid);
 
+        // We have to check if the page is null. This will help us know
+        // that the page actually exists, so if it is null we can just return!
+        if (pg == null) {
+            return;
+        }
+
         // Have to check if the page is dirty
         // If the page is not dirty, we don't need to flush it to the disk
         // so we can just return!
@@ -264,17 +290,24 @@ public class BufferPool {
             return;
         }
 
-        // We have to check if the page is null. This will help us know
-        // that the page actually exists, so if it is null we can just return!
-        if (pg == null) {
-            return;
+
+        // append an update record to the log, with
+        // a before-image and after-image.
+        TransactionId dirtier = pg.isDirty();
+        if (dirtier != null){
+            Database.getLogFile().logWrite(dirtier, pg.getBeforeImage(), pg);
+            Database.getLogFile().force();
         }
+
+
+        // Write the page back to the disk
+        Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(pg);
+
 
         // We can now mark the page as not dirty since it has been flushed to disk
         // and is no longer modified in our memory.
         pg.markDirty(false, null);
-        // Write the page back to the disk
-        Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(pg);
+
     }
 
     /** Write all pages of the specified transaction to disk.
@@ -304,6 +337,17 @@ public class BufferPool {
             // we're going to exit the loop and continue on!
             if (pg.isDirty() == null) {
                 pidToEvict = pid;
+                break;
+            }
+        }
+
+        // if there are no clean pages available, we need to evict a dirty page
+        if (pidToEvict == null) {
+            // Iterate through all the pages in the bufferpool
+            for (PageId pid : idToPg.keySet()) {
+                // selecting the first page that is dirty in the bufferpool...
+                pidToEvict = pid;
+                // once we select it, we break so no more are being selected
                 break;
             }
         }
