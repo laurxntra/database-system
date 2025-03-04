@@ -154,7 +154,8 @@ public class BufferPool {
                 // logging the change for the dirty page with its before & after...
                 Database.getLogFile().logWrite(tid, page.getBeforeImage(), page);
 
-                // updates the pages before image to reflect its committed state!!
+                // use current page contents as the before-image
+                // for the next transaction that modifies this page.
                 page.setBeforeImage();
             }
 

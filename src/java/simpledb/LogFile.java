@@ -470,27 +470,27 @@ public class LogFile {
 
                 // We need to determine where in the log file the transaction's records begin..
                 long beginOf = this.tidToFirstLogRecord.get(tid.getId());
-                // so we need to set the file ptr to start at the transaction's records
-                // in the log file
+                // so we need to move the file ptr to the start of our transaction's records
                 raf.seek(beginOf);
 
+                // looping through the log records until EOF...
                 while (true) {
                     try {
                         // we will read the type of the current log record and the tid associated with it
                         int recType = raf.readInt();
                         long recTid = raf.readLong();
 
-                        // if our record indicates an update is being made by a transaction, then...
+                        // we need to check if the record has an update made by a transaction...
                         if (recType == UPDATE_RECORD) {
-                            // we need to read the type of the current log and the tid associated with it
+                            // so, we need to grab the state of the page before & after the update
                             Page beforeState = readPageData(raf);
                             Page afterState = readPageData(raf);
 
                             // now, we need to check if this update actually belongs to the transaction
                             if (recTid == tid.getId()) {
-                                // so we grab the database file that has the affected page
+                                // if so, we grab the database file that has the affected page
                                 DbFile f = Database.getCatalog().getDatabaseFile(beforeState.getId().getTableId());
-                                // write the before state of the page back to the db
+                                // write the before state of the page back to the DbFile
                                 f.writePage(beforeState);
                                 // then discard the after state of the page from the bufferpool
                                 Database.getBufferPool().discardPage(afterState.getId());
