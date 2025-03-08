@@ -3,10 +3,7 @@ package simpledb;
 import javax.xml.crypto.Data;
 import java.io.*;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -146,13 +143,14 @@ public class BufferPool {
             for (PageId pid : idToPg.keySet()) {
                 Page page = idToPg.get(pid);
 
-                // we will skip pages that are null/not dirty by the transaction
-                if (page == null || page.isDirty() != tid) {
+                // we will skip pages that are null
+                if (page == null) {
                     continue;
                 }
 
                 // logging the change for the dirty page with its before & after...
                 Database.getLogFile().logWrite(tid, page.getBeforeImage(), page);
+                Database.getLogFile().force();
 
                 // use current page contents as the before-image
                 // for the next transaction that modifies this page.

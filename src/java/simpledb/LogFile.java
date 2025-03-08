@@ -496,6 +496,9 @@ public class LogFile {
                                 Database.getBufferPool().discardPage(afterState.getId());
                             }
 
+                        } else if (recType == CHECKPOINT_RECORD) {
+                            int numActiveTransactions = raf.readInt();
+                            raf.skipBytes(numActiveTransactions * (LONG_SIZE * 2));
                         } else {
                             // skipping any data that is non-update records
                             raf.readLong();
@@ -532,7 +535,135 @@ public class LogFile {
         synchronized (Database.getBufferPool()) {
             synchronized (this) {
                 recoveryUndecided = false;
-                // some code goes here
+                // latest checkpoint is at the beginning of the file, so we set pointer there
+                raf.seek(0);
+                // read it and see if there exists a checkpoint
+                long latestCheckpoint = raf.readLong();
+                // if not -1, that means there is a checkpoint we can go to
+                if (latestCheckpoint != -1) {
+                    // we go to the latest checkpoint
+                    raf.seek(latestCheckpoint);
+                    // check if the type of the log is a checkpoint record, if it isn't... well...
+                    if (raf.readInt() != CHECKPOINT_RECORD) {
+                        throw new RuntimeException("Does not point to a checkpoint record.");
+                    }
+                    // skip the long_size bytes after recordType which just stores -1
+                    raf.readLong();
+                    // get the number of active transactions at time of checkpoint
+                    int numActiveT = raf.readInt();
+                    // we add it to tidToFirstLogRecord to track active transaction at time of crash and their first record
+                    for (int i = 0; i < numActiveT; i++) {
+                        tidToFirstLogRecord.put(raf.readLong(), raf.readLong()); // first long is the tid, 2nd is pointer to record
+                    }
+                    raf.readLong();
+                }
+                // if we didnt enter above if, that means there was no checkpoint so we should begin at start of file
+
+                // redo pass
+                while (true) {
+                    try {
+                        // we get the type and tid of the current log record
+                        int recType = raf.readInt();
+                        long recTid = raf.readLong();
+
+                        switch (recType) {
+                            case ABORT_RECORD:
+                                // we remove the tid if we abort
+                                tidToFirstLogRecord.remove(recTid);
+                                // we read the offset long
+                                raf.readLong();
+                                break;
+                            case BEGIN_RECORD:
+                                // there was a transaction that began after the checkpoint was made
+                                // we add the new transaction to our list of active transactions as well as the
+                                // offset to the first record of this new transaction
+                                tidToFirstLogRecord.put(recTid, raf.readLong());
+                                break;
+                            case COMMIT_RECORD:
+                                // since we committed, we can remove this tid from list of active transactions
+                                tidToFirstLogRecord.remove(recTid);
+                                // we read the offset long
+                                raf.readLong();
+                                break;
+                            case UPDATE_RECORD:
+                                Page beforeState = readPageData(raf);
+                                Page afterState = readPageData(raf);
+
+                                // we rewrite the page to its after state, restoring it
+                                DbFile f = Database.getCatalog().getDatabaseFile(beforeState.getId().getTableId());
+                                f.writePage(afterState);
+                                // reading offset long
+                                raf.readLong();
+                                break;
+                            case CHECKPOINT_RECORD:
+                                // should not enter here bc we should be at the most recent checkpoint
+                                throw new RuntimeException("Should not run into a checkpoint record");
+                            default:
+                                // if we enter default case, we likely read incorrectly somewhere causing
+                                // recType to not be one of the above cases
+                                throw new RuntimeException("Does not support recType: " + recType);
+                        }
+                    } catch (EOFException e) {
+                        break;
+                    }
+                }
+
+                // we set earliestOffset to the length of the file bc if tidToFirstLogRecord holds no
+                // tids, then there is nothing we have to undo bc there is no active transactions
+                // then we will never enter the while loop
+                // if there exists tids in the map, then earliestOffset will get updated to an offset further up
+                // the file
+                long earliestOffset = raf.length();
+                for (long key : tidToFirstLogRecord.keySet()) {
+                    long offset = tidToFirstLogRecord.get(key);
+                    if (offset < earliestOffset) {
+                        earliestOffset = offset;
+                    }
+                }
+
+                // go to end of the file so that we can read backwards for undos
+                long offset = raf.length();
+
+                //undo pass
+                while (offset > earliestOffset) {
+                    // on first loop we're at the end of the file, we - LONG_SIZE to get to the record's start pointer
+                    // on subsequent loops, same idea, we - LONG_SIZE so that we can read the offset pointer
+                    raf.seek(offset - LONG_SIZE);
+                    offset = raf.readLong(); // updating offset to where we'll be moving to next
+                    raf.seek(offset); // moving to offset, now we're at the beginning of a record
+
+                    // read to get type of record and the tid associated with it
+                    int recType = raf.readInt();
+                    long recTid = raf.readLong();
+
+                    switch (recType) {
+                        // abort, begin, and commit, we can just break, so letting it cascade to the break in commit case
+                        case ABORT_RECORD:
+                        case BEGIN_RECORD:
+                        case COMMIT_RECORD:
+                            break;
+                        case UPDATE_RECORD:
+                            Page beforeState = readPageData(raf);
+
+                            // we only undo an update if the tid of this record is inside our map of active tids
+                            if (tidToFirstLogRecord.containsKey(recTid)) {
+                                // we undo it by setting the page to its before state
+                                DbFile f = Database.getCatalog().getDatabaseFile(beforeState.getId().getTableId());
+                                f.writePage(beforeState);
+                            }
+                            break;
+                        case CHECKPOINT_RECORD:
+                            // checkpoint records we dont do anything with either but we need to read through
+                            // all the info it stores so we can move on
+
+                            // reading the int that stores num active transactions
+                            int numberActiveTransactions = raf.readInt();
+                            // for each active transaction, checkpoint also stores the tid of it and the offset to
+                            // the first record log so we skip everything
+                            raf.skipBytes(numberActiveTransactions * (LONG_SIZE * 2));
+                            break;
+                    }
+                }
             }
          }
     }
