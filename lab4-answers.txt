@@ -1,0 +1,20 @@
+(1) Describe your implementation including any design decisions you made. Make sure to emphasize anything that was
+difficult or unexpected
+
+RECOVERY:
+We didn't implement CLR logs. We did try to implement it, but we couldn't figure it out and tried doing the other
+approach instead which worked out for us better. For recovery, we did 2 passes, one pass for redo in which we redid the
+map of active  transactions and update logs. In redo pass, we read forwards. The map of active transactions helped us
+in undo where we  read backwards and for every update log we encountered we check if it's in the map of active
+transactions. If it is, that means we can undo that update since it was a transaction that neither aborted nor committed.
+
+(2) Discuss and justify any changes you made outside of LogFile.java.
+We had to make the changes specified in specs before exercise 1. Aside from those changes, we did not make any other
+changes to files outside of LogFile.java.
+
+(3) Describe a unit test that could be added to improve the set of unit tests that we provided for this lab.
+
+
+(4) If you have any feedback for us on the assignment, you can add it to the writeup, send us an email, or make a note
+and paste your note in the course evaluation form at the end of the quarter.
+N/A
