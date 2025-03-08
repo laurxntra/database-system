@@ -1,0 +1,14 @@
+Feedback for: thanhly3
+--------------------------------------------------------------
+Total Score (%): 100
+Unit Test Score (out of 15): 15
+System Test Score (out of 6): 6
+Code Score (out of 10): 10
+Writeup Score (out of 10): 10
+--------------------------------------------------------------
+Writeup Feedback (10/10):
+Nice job!
+(-0): You don’t need to include as many technical details in future writeups! For the summary part of the writeup, try to explain at a high level what methods you modified to enforce the given concepts.
+
+Code Feedback (10/10):
+Great job!
