@@ -1,19 +1,53 @@
 (1) Describe your implementation including any design decisions you made. Make sure to emphasize anything that was
 difficult or unexpected
+BufferPool.flushPage():
+    - As stated in the specification, we needed to insert logging modifications before calling writePage(p). This will help
+    ensure that an update record with before and after states (images) is appended to the log and forced to disk before
+    writing the page to disk. This also helps check if the transaction that dirtied the page is still executing.
+    If it is, the change is logged → otherwise, if the transaction has already committed, logging is skipped because it
+     was already logged before writing the COMMIT log record
 
-RECOVERY:
-We didn't implement CLR logs. We did try to implement it, but we couldn't figure it out and tried doing the other
-approach instead which worked out for us better. For recovery, we did 2 passes, one pass for redo in which we redid the
-map of active  transactions and update logs. In redo pass, we read forwards. The map of active transactions helped us
-in undo where we  read backwards and for every update log we encountered we check if it's in the map of active
-transactions. If it is, that means we can undo that update since it was a transaction that neither aborted nor committed.
+BufferPool.evictPage():
+    - For evictPage(), we modified the implementation to handle the scenario where no clean pages are available for
+    eviction. The method loops through the bufferpool to find a clean page to evict. If no clean pages are found, it
+    now iterates through the bufferpool to find a dirty page to evict as a fallback option. We also added an exception
+    is thrown if all pages are dirty and need flushing before eviction. This helps support the STEAL policy by allowing
+    the bufferpool to flush and evict any pages as needed.
+
+BufferPool.transactionComplete():
+    - For transactionComplete(), our implementation was updated to support the NO FORCE policy. When committing a
+    transaction, instead of flushing dirty pages to disk, the method now iterates through all pages in the buffer pool.
+    For each dirty page associated with the transaction, the method logs the change with logWrite(tid,
+    page.getBeforeImage(), page) and forces the log to disk. It then calls page.setBeforeImage() to update the page’s
+    before-image for future transactions.
+
+LogFile.java (rollback)
+    - The rollback method is designed to reverse all updates made by a specific tid. This involves navigating through a
+    log file to find and undo changes made by the transaction. Using the tid, the method locates the beginning of the
+    transaction’s log records by seeking to the starting position stored in tidToFirstLogRecord. It then loops through
+    the log records, reading each record type and associated tid to ensure all updates are processed until the EOF.
+    For each updated record, the method will then read the before and after states of the affected page, checking to
+    see if the update belongs to the transaction before proceeding. If the update belongs to the transaction, the
+    method restores the page to its state before the update by writing the before state back to the database file and
+    discarding the after state from the buffer pool. Any non updated records are skipped by reading the next long value
+    in the log file, allowing it to only focus on the updates.
+
+LogFile.java (recovery)
+    - We didn't implement CLR logs. We did try to implement it, but we couldn't figure it out and tried doing the other
+    approach instead which worked out for us better. For recovery, we did 2 passes, one pass for redo in which we
+    redid the map of active  transactions and update logs. In redo pass, we read forwards. The map of active
+    transactions helped us in undo where we  read backwards and for every update log we encountered we check if it's in
+    the map of active transactions. If it is, that means we can undo that update since it was a transaction that
+    neither aborted nor committed.
 
 (2) Discuss and justify any changes you made outside of LogFile.java.
-We had to make the changes specified in specs before exercise 1. Aside from those changes, we did not make any other
-changes to files outside of LogFile.java.
+    - We had to make the changes specified in specs before exercise 1. Aside from those changes, we did not make any other
+    changes to files outside of LogFile.java.
 
 (3) Describe a unit test that could be added to improve the set of unit tests that we provided for this lab.
-
+    - To enhance the unit tests of the lab, we could possibly introduce an additional test that verifies the
+    functionalities of flushPage() and transactionComplete(). During our implementation, we faced challenges
+    as to which methods were implemented incorrect -- the current tests did not help pinpoint these errors.
 
 (4) If you have any feedback for us on the assignment, you can add it to the writeup, send us an email, or make a note
 and paste your note in the course evaluation form at the end of the quarter.
