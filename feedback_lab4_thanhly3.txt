@@ -1,0 +1,14 @@
+Feedback for: thanhly3
+--------------------------------------------------------------
+Total Score (%): 100
+Unit Test Score (out of 15): 0
+System Test Score (out of 6): 10
+Code Score (out of 10): 10
+Writeup Score (out of 10): 10
+--------------------------------------------------------------
+Writeup Feedback (10/10):
+Nice job!
+(-0) You don't need to go into highly technical detail. Focus on the high level functionalities of components in your system and how they interact, especially for the final writeup report!
+
+Code Feedback (10/10):
+Great job!
