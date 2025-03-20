@@ -12,6 +12,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * This class is not needed in implementing lab1 and lab2.
  */
 public class TableStats {
+    private final int numPages;
+    private int numTuples;
+    private final Map<Integer, IntHistogram> intHistogram;
+    private final Map<Integer, StringHistogram> stringHistogram;
+    private final int givenIoCostPerPage;
 
     private static final ConcurrentHashMap<String, TableStats> statsMap = new ConcurrentHashMap<String, TableStats>();
 
@@ -77,14 +82,83 @@ public class TableStats {
      *            sequential-scan IO and disk seeks.
      */
     public TableStats(int tableid, int ioCostPerPage) {
-        // For this function, you'll have to get the
-        // DbFile for the table in question,
-        // then scan through its tuples and calculate
-        // the values that you need.
-        // You should try to do this reasonably efficiently, but you don't
-        // necessarily have to (for example) do everything
-        // in a single scan of the table.
-        // some code goes here
+        HeapFile file = (HeapFile) Database.getCatalog().getDatabaseFile(tableid); // dbFile for table in question
+        DbFileIterator fileIter = file.iterator(new TransactionId()); // iterator for file
+        int numFields = file.getTupleDesc().numFields();
+        Map<Integer, Integer> fieldsMin = new HashMap<>();
+        Map<Integer, Integer> fieldsMax = new HashMap<>();
+
+        numTuples = 0;
+        numPages = file.numPages();
+        givenIoCostPerPage = ioCostPerPage;
+        intHistogram = new HashMap<>();
+        stringHistogram = new HashMap<>();
+
+        // get the min and max values of each fields
+        try {
+            fileIter.open();
+            // keep looping until there are no more tuples in file
+            while (fileIter.hasNext()) {
+                Tuple tuple = fileIter.next();
+                // increase numTuples because we need to keep track of the number of tuples in this file for
+                // estimateTableCardinality
+                numTuples++;
+                for (int i = 0; i < numFields; i++) {
+                    // as we loop through the fields/attributes, we only check min/max if type is INT
+                    if (tuple.getField(i).getType() == Type.INT_TYPE) {
+                        int newVal = ((IntField) tuple.getField(i)).getValue();
+
+                        // select the min or max between the newVal and the currentVal stored for field i
+                        // if i doesnt exist in map yet, default to max_value or min_value accordingly before
+                        // comparing min/max
+                        int newMin = Math.min(fieldsMin.getOrDefault(i, Integer.MAX_VALUE), newVal);
+                        int newMax = Math.max(fieldsMax.getOrDefault(i, Integer.MIN_VALUE), newVal);
+
+                        fieldsMin.put(i, newMin);
+                        fieldsMax.put(i, newMax);
+                    }
+
+                }
+            }
+            fileIter.close();
+        } catch (TransactionAbortedException | DbException ignored) {
+        }
+
+        try {
+            fileIter.open();
+            // keep looping until there are no more tuples in file
+            while (fileIter.hasNext()) {
+                Tuple tuple = fileIter.next();
+                for (int i = 0; i < numFields; i++) {
+                    // as we loop through each field, depending on if INT or STRING type, build corresponding histogram
+                    Type fieldType = tuple.getField(i).getType();
+                    if (fieldType == Type.INT_TYPE) {
+                        // get the int value
+                        int newVal = ((IntField) tuple.getField(i)).getValue();
+                        // if intHistogram doesnt have current field yet, create a new one and add it
+                        if (!intHistogram.containsKey(i)) {
+                            intHistogram.put(i, new IntHistogram(NUM_HIST_BINS, fieldsMin.get(i), fieldsMax.get(i)));
+                        }
+                        // add new int value to the histogram
+                        IntHistogram h = intHistogram.get(i);
+                        h.addValue(newVal);
+                    } else if (fieldType == Type.STRING_TYPE) {
+                        // get the string value
+                        String newVal = ((StringField) tuple.getField(i)).getValue();
+                        // if stringHistogram doesnt have current field yet, create a new one and add it
+                        if (!stringHistogram.containsKey(i)) {
+                            stringHistogram.put(i, new StringHistogram(NUM_HIST_BINS));
+                        }
+                        // add new string value to the histogram
+                        StringHistogram h = stringHistogram.get(i);
+                        h.addValue(newVal);
+                    }
+                }
+            }
+            fileIter.close();
+        } catch (TransactionAbortedException | DbException ignored) {
+
+        }
     }
 
     /**
@@ -100,8 +174,7 @@ public class TableStats {
      * @return The estimated cost of scanning the table.
      */
     public double estimateScanCost() {
-        // some code goes here
-        return 0;
+        return givenIoCostPerPage * numPages;
     }
 
     /**
@@ -114,8 +187,7 @@ public class TableStats {
      *         selectivityFactor
      */
     public int estimateTableCardinality(double selectivityFactor) {
-        // some code goes here
-        return 0;
+        return (int) (selectivityFactor * numTuples);
     }
 
     /**
@@ -129,7 +201,6 @@ public class TableStats {
      * expected selectivity. You may estimate this value from the histograms.
      * */
     public double avgSelectivity(int field, Predicate.Op op) {
-        // some code goes here
         return 1.0;
     }
 
@@ -147,16 +218,31 @@ public class TableStats {
      *         predicate
      */
     public double estimateSelectivity(int field, Predicate.Op op, Field constant) {
-        // some code goes here
-        return 1.0;
+        Type fieldType = constant.getType();
+        double selectivity = 0.0;
+
+        if (fieldType == Type.INT_TYPE) {
+            if (!intHistogram.isEmpty() && intHistogram.containsKey(field)) {
+                int value = ((IntField) constant).getValue();
+                IntHistogram h = intHistogram.get(field);
+                selectivity = h.estimateSelectivity(op, value);
+            }
+        } else if (fieldType == Type.STRING_TYPE) {
+            if (!stringHistogram.isEmpty() && stringHistogram.containsKey(field)) {
+                String value = ((StringField) constant).getValue();
+                StringHistogram h = stringHistogram.get(field);
+                selectivity = h.estimateSelectivity(op, value);
+            }
+        }
+
+        return selectivity;
     }
 
     /**
      * return the total number of tuples in this table
      * */
     public int totalTuples() {
-        // some code goes here
-        return 0;
+        return numTuples;
     }
 
 }

@@ -111,7 +111,7 @@ public class JoinOptimizer {
             // HINT: You may need to use the variable "j" if you implemented
             // a join algorithm that's more complicated than a basic
             // nested-loops join.
-            return -1.0;
+            return cost1 + cost2 + ((cost1 + card1 * cost2) + (card1 * card2));
         }
     }
 
@@ -156,7 +156,23 @@ public class JoinOptimizer {
             boolean t2pkey, Map<String, TableStats> stats,
             Map<String, Integer> tableAliasToId) {
         int card = 1;
-        // some code goes here
+        // from spec: For equality joins, when one of the attributes is a primary key, the number of tuples produced by
+        // the join cannot be larger than the cardinality of the non-primary key attribute.
+        if (joinOp == Predicate.Op.EQUALS) {
+            if (t1pkey) {
+                return card2;
+            } else if (t2pkey) {
+                return card1;
+            } else {
+                // equality join but no primary key, make up a simple heuristic
+                // chosen heuristic is just larger card of the 2 tables
+                return Math.max(card1, card2);
+            }
+        }
+
+        // from spec:  It is fine to assume that a fixed fraction of the cross-product is emitted by range scans
+        // (say, 30%)
+        card = (int) (0.3 / (card1 * card2));
         return card <= 0 ? 1 : card;
     }
 
